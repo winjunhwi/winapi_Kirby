@@ -730,18 +730,21 @@ SolidBlock g_stage3SolidBlocks[] =
     { { 0, 0, 12, 650 }, L"S3_90_LEFT_LIMIT" },
 
     // PNG91 µÎ ¹øÂ° ±¸°£: x = 1000 ~ 1999
-    { { 1000, 536, 2000, 650 }, L"S3_90_TOP_LEDGE" },
-    { { 1182, 406, 2000, 650 }, L"S3_91_LEFT_BOTTOM_GROUND" },
-    { { 1143, 476, 1190, 491 }, L"S3_91_MAIN_LEDGE" },
-    { { 1100, 406, 1187, 424 }, L"S3_91_MAIN_GROUNDWOOD" },
-    { { 1186, 406, 2000 , 650 }, L"S3_91_CENTER_PILLAR" },
+   { { 1000, 536, 2000, 650 }, L"S3_90_TOP_LEDGE" },
+   { { 1182, 406, 2000, 650 }, L"S3_91_LEFT_BOTTOM_GROUND" },
+   { { 1137, 476, 1190, 491 }, L"S3_91_MAIN_LEDGE WOOD" },
+   { { 1100, 406, 1187, 424 }, L"S3_91_MAIN_GROUNDWOOD" },
+   { { 1175, 406, 2000 , 650 }, L"S3_91_CENTER_PILLAR" },
 
-    { { 1852, 288, 1855, 425 }, L"S3_91_RIGHT_LEDGE" },
-    { { 1635, 425, 2000, 650 }, L"S3_91_RIGHT_GROUND" },
-    { { 1800, 205, 1960, 238 }, L"S3_91_TOP_LEDGE" },
+   { { 1852, 280, 1900, 402 }, L"S3_91_RIGHT_LEDGE" },
+   { { 1635, 425, 2000, 650 }, L"S3_91_RIGHT_GROUND" },
+     { { 1660, 280, 1723, 405 }, L"S3_91_RIGHT_OBSTACLE" },
+         { { 1660, 280, 1736, 348 }, L"S3_91_RIGHT_OBSTACLE.2" },
+             { { 1761, 280, 1900, 348 }, L"S3_91_RIGHT_WALL" },
+   { { 1805, 123, 1890, 146 }, L"S3_91_TOP_LEDGE" },
 
-    // ¸Ê ³¡ º®¸¸ ¾ã°Ô
-    { { 1900, 0, 2000, 650 }, L"S3_91_RIGHT_LIMIT" }
+   // ¸Ê ³¡ º®¸¸ ¾ã°Ô
+   { { 1900, 0, 2000, 650 }, L"S3_91_RIGHT_LIMIT" }
 };
 
 int g_stage3SolidBlockCount = sizeof(g_stage3SolidBlocks) / sizeof(g_stage3SolidBlocks[0]);
@@ -1799,11 +1802,12 @@ void InitStage3RescueObjects()
     g_stage3Door.opened = true;
     g_stage3Door.w = 81;
     g_stage3Door.h = 101;
-    g_stage3Door.x = 1875;
-    g_stage3Door.y = 205 - g_stage3Door.h + 7;
+    g_stage3Door.x = 1810;
+    g_stage3Door.y = 126 - g_stage3Door.h + 7;
     g_stage3Door.frameIndex = DOOR_FRAME_COUNT - 1;
     g_stage3Door.tick = 0;
 }
+
 
 void InitRescueObjects()
 {
