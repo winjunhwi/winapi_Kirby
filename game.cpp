@@ -3,18 +3,11 @@
 #include <mmsystem.h>
 #include <stdlib.h>
 #include <time.h>
-#include <math.h>
 
 #pragma comment(lib, "gdiplus.lib")
 #pragma comment(lib, "winmm.lib")
 
 using namespace Gdiplus;
-
-#include "collision.h"
-#include "stage.h"
-#include "player.h"
-#include "resource_manager.h"
-#include "effect_manager.h"
 
 
 #ifndef IDB_PNG93
@@ -84,123 +77,12 @@ using namespace Gdiplus;
 #define IDB_PNG114 114
 #endif
 
-// 115~137번: 엔딩/임시맵 커비 춤 프레임
-#ifndef IDB_PNG115
-#define IDB_PNG115 115
-#endif
-#ifndef IDB_PNG116
-#define IDB_PNG116 116
-#endif
-#ifndef IDB_PNG117
-#define IDB_PNG117 117
-#endif
-#ifndef IDB_PNG118
-#define IDB_PNG118 118
-#endif
-#ifndef IDB_PNG119
-#define IDB_PNG119 119
-#endif
-#ifndef IDB_PNG120
-#define IDB_PNG120 120
-#endif
-#ifndef IDB_PNG121
-#define IDB_PNG121 121
-#endif
-#ifndef IDB_PNG122
-#define IDB_PNG122 122
-#endif
-#ifndef IDB_PNG123
-#define IDB_PNG123 123
-#endif
-#ifndef IDB_PNG124
-#define IDB_PNG124 124
-#endif
-#ifndef IDB_PNG125
-#define IDB_PNG125 125
-#endif
-#ifndef IDB_PNG126
-#define IDB_PNG126 126
-#endif
-#ifndef IDB_PNG127
-#define IDB_PNG127 127
-#endif
-#ifndef IDB_PNG128
-#define IDB_PNG128 128
-#endif
-#ifndef IDB_PNG129
-#define IDB_PNG129 129
-#endif
-#ifndef IDB_PNG130
-#define IDB_PNG130 130
-#endif
-#ifndef IDB_PNG131
-#define IDB_PNG131 131
-#endif
-#ifndef IDB_PNG132
-#define IDB_PNG132 132
-#endif
-#ifndef IDB_PNG133
-#define IDB_PNG133 133
-#endif
-#ifndef IDB_PNG134
-#define IDB_PNG134 134
-#endif
-#ifndef IDB_PNG135
-#define IDB_PNG135 135
-#endif
-#ifndef IDB_PNG136
-#define IDB_PNG136 136
-#endif
-#ifndef IDB_PNG137
-#define IDB_PNG137 137
-#endif
-#ifndef IDB_PNG138
-#define IDB_PNG138 138
-#endif
-#ifndef IDB_PNG139
-#define IDB_PNG139 139
-#endif
-#ifndef IDB_PNG140
-#define IDB_PNG140 140
-#endif
-#ifndef IDB_PNG141
-#define IDB_PNG141 141
-#endif
-#ifndef IDB_PNG142
-#define IDB_PNG142 142
-#endif
-
 
 HINSTANCE g_hInst;
 LPCTSTR lpszClass = L"WindowClass";
 LPCTSTR lpszWindowName = L"GDI+ Kirby Animation";
 
 ULONG_PTR g_gdiplusToken;
-
-// 115~137번: 커비 춤 프레임
-const int DANCE_FRAME_COUNT = 23;
-const int DANCE_FRAME_DURATION = 6;   // 춤 프레임 전환 속도. 값이 클수록 천천히 춤
-const int DANCE_SPIN_TICK = 52;       // 초반 빙글빙글 도는 시간
-const int DANCE_DRAW_W = 72;
-const int DANCE_DRAW_H = 72;
-
-// 춤 위치 이동용 값
-// 영상처럼 제자리에서 프레임만 바뀌는 게 아니라
-// 오른쪽 -> 왼쪽 -> 가운데 순서로 x값이 움직이게 함.
-const int DANCE_FLOOR_Y = 392; // 춤 위치 Y좌표. 값을 줄이면 위로 올라감
-const int DANCE_CENTER_X = 500;
-const int DANCE_RIGHT_X = 555;
-const int DANCE_LEFT_X = 445;
-const int DANCE_END_TICK = 332;
-
-Image* g_danceFrames[DANCE_FRAME_COUNT] = { NULL };
-int g_danceFrameIndex = 0;
-int g_danceFrameTick = 0;
-int g_danceTick = 0;
-float g_danceAngle = 0.0f;
-int g_danceX = DANCE_CENTER_X;
-int g_danceY = DANCE_FLOOR_Y - DANCE_DRAW_H;
-bool g_danceFinished = false; // 마지막 프레임에서 멈추기용
 
 // 72번: 오프닝 화면
 Image* g_openingFrame = NULL;
@@ -215,7 +97,6 @@ const int STORY_FRAME_DURATION = 22; // 40ms 타이머 기준 약 0.9초
 // 처음 실행하면 72번 오프닝, SPACE를 누르면 73~79번 스토리 진행 후 1스테이지 시작
 bool g_isOpening = true;
 bool g_isStory = false;
-int g_openingTick = 0;
 
 
 // 81번: 악몽 속에서 떨고 있는 남자 아이
@@ -227,6 +108,29 @@ Image* g_studentGirlFrame = NULL;
 // 84~87번: 다음 맵으로 넘어가는 문 열림 애니메이션
 Image* g_doorFrames[4] = { NULL, NULL, NULL, NULL };
 const int DOOR_FRAME_COUNT = 4;
+
+struct RescueChild
+{
+    bool active;
+    bool rescued;
+    int x;
+    int y;
+    int w;
+    int h;
+};
+
+struct StageDoor
+{
+    bool active;
+    bool opening;
+    bool opened;
+    int x;
+    int y;
+    int w;
+    int h;
+    int frameIndex;
+    int tick;
+};
 
 // 1스테이지 구출/문 상태
 RescueChild g_stage1Boy;
@@ -304,15 +208,10 @@ Image* g_stage3BackgroundFront = NULL;
 Bitmap* g_stage3BackgroundFrontScaled = NULL;
 Image* g_stage3BackgroundBack = NULL;
 Bitmap* g_stage3BackgroundBackScaled = NULL;
-Image* g_stage3RockFrame = NULL;
 
 // 92번: 마지막 4스테이지 / 보스전 배경
 Image* g_stage4Background = NULL;
 Bitmap* g_stage4BackgroundScaled = NULL;
-
-// 138번: 마지막 클리어 스테이지 배경
-Image* g_stage5ClearBackground = NULL;
-Bitmap* g_stage5ClearBackgroundScaled = NULL;
 
 // 93~101번: 4스테이지 보스 관련 프레임
 Image* g_bossMissilePoseFrame = NULL; // 93번: 미사일 공격 자세
@@ -333,10 +232,7 @@ Image* g_bossHalfFloorBoomFrame = NULL;   // 107번: 바닥 절반 폭발
 Image* g_bossDoorFrames[4] = { NULL, NULL, NULL, NULL }; // 108~111번 문 열림
 Image* g_bossKeyFrame = NULL;         // 112번 열쇠
 Image* g_bossChestClosedFrame = NULL; // 113번 닫힌 상자
-Image* g_bossChestOpenFrame = NULL;
-Image* g_bossBerserkAbsorbFrame1 = NULL;
-Image* g_bossBerserkAbsorbFrame2 = NULL;
-Image* g_bossBerserkEnergyBallFrame = NULL;
+Image* g_bossChestOpenFrame = NULL;   // 114번 열린 상자
 
 // 24번: 몬스터를 먹은 뒤 커진 커비 가만히 있는 프레임
 Image* g_powerIdleFrame = NULL;
@@ -479,7 +375,7 @@ const int FIRE_TRANSFORM_DURATION = 30;
 int fireWalkFrameIndex = 0;
 const int FIRE_WALK_FRAME_COUNT = 4;
 
-// K/I 공격 시 45번 불 속성 커비 공격 자세ff
+// K/I 공격 시 45번 불 속성 커비 공격 자세
 bool isFireAttackPose = false;
 int fireAttackPoseTick = 0;
 const int FIRE_ATTACK_POSE_DURATION = 12;
@@ -593,7 +489,7 @@ const int KIRBY_HIT_COOLDOWN = 60; // 약 1초
 int kirbyMaxHP = 100;
 int kirbyHP = 100;          // 실제 체력 목표값
 float kirbyDisplayHP = 100.0f; // 화면에 부드럽게 표시되는 체력
-const int KIRBY_DAMAGE = 25;
+const int KIRBY_DAMAGE = 15;
 const float HP_ANIM_SPEED = 0.5f; // 16ms 타이머 기준. 작을수록 천천히 줄어듦
 bool isGameOver = false;
 bool g_gameOverHandled = false; // 게임오버 메시지박스가 여러 번 뜨는 것 방지
@@ -606,74 +502,6 @@ const int GAME_OVER_DELAY = 30; // HP 표시가 0이 된 뒤 약 0.5초 후 종료
 
 // 낙사 게임오버 상태. HP가 0이 된 게임오버와 메시지를 다르게 보여주기 위해 따로 저장
 bool g_kirbyFallGameOver = false;
-
-const int KIRBY_MAX_LIVES = 7;
-const int RETRY_COUNTDOWN_TICKS = 250; // GAME_TIMER_MS 40ms 기준 10초
-const int PAUSE_MENU_COUNT = 4;
-const int CONTROL_GUIDE_TICK_MAX = 150; // GAME_TIMER_MS 40ms 기준 약 6초
-const int CONTROL_GUIDE_RESHOW_TICK = 125;
-int g_kirbyLives = KIRBY_MAX_LIVES;
-bool g_isPaused = false;
-int g_pauseMenuIndex = 0;
-bool g_retryActive = false;
-bool g_finalGameOver = false;
-int g_retryCountdownTick = RETRY_COUNTDOWN_TICKS;
-int g_retryRespawnX = 55;
-int g_retryRespawnY = 470;
-int g_lastSafeKirbyX = 55;
-int g_lastSafeKirbyY = 470;
-int g_controlGuideTick = CONTROL_GUIDE_TICK_MAX;
-bool g_controlGuideForced = false;
-int g_currentBgmMode = -1;
-
-bool g_playTimerStarted = false;
-int g_playTimeTick = 0;
-int g_clearTimeTick = 0;
-bool g_clearTimeSaved = false;
-int g_totalDamageCount = 0;
-int g_totalDeathCount = 0;
-int g_bossDamageCount = 0;
-int g_bossDeathCount = 0;
-int g_totalStudentsRescued = 0;
-int g_gameScore = 0;
-
-// Stage gimmick state
-const int WIND_DURATION = 50;      // about 2 seconds
-const int WIND_COOLDOWN = 125;     // about 5 seconds
-bool g_windActive = false;
-int g_windDir = 1;
-int g_windTick = 0;
-int g_windCooldownTick = WIND_COOLDOWN;
-
-const int FALLING_ROCK_MAX = 5;
-const int FALLING_ROCK_WARNING_TICK = 10;
-struct FallingRock
-{
-    bool active;
-    bool warning;
-    int x;
-    int y;
-    int targetY;
-    int w;
-    int h;
-    float vy;
-    int warningTick;
-};
-FallingRock g_fallingRocks[FALLING_ROCK_MAX];
-int g_fallingRockSpawnTick = 25;
-
-enum GameSoundId
-{
-    SFX_JUMP = 0,
-    SFX_HIT,
-    SFX_RESCUE,
-    SFX_DOOR,
-    SFX_CLEAR,
-    SFX_BOSS_PHASE2,
-    SFX_PAUSE,
-    SFX_RETRY,
-    SFX_ATTACK
-};
 
 // 34번 투사체 상태
 bool isPowerProjectileActive = false;
@@ -734,7 +562,7 @@ int balloonSpeed = 4;
 
 // SHIFT 달리기 상태
 bool isDash = false;
-int dashSpeed = 8;
+int dashSpeed = 6;
 int dashFrameIndex = 0;
 int dashFrameTick = 0;
 int dashFrameCount = 3;
@@ -791,7 +619,174 @@ const int MONSTER_HIT_RIGHT = 20;
 const int MONSTER_HIT_TOP = 20;
 const int MONSTER_HIT_BOTTOM = 12;
 
-#include "collision.cpp"
+struct SolidBlock
+{
+    RECT rc;
+    LPCWSTR name;
+};
+
+SolidBlock g_solidBlocks[] =
+{
+    // =========================
+    // PNG22 첫 번째 맵 충돌체
+    // 예전에 쓰던 충돌체 다시 유지
+    // =========================
+    { { 0, 545, 289, 613 }, L"MAP1_GROUND_1" },
+    { { 132, 512, 237, 620 }, L"MAP1_BLOCK_1" },
+    { { 280, 545, 600, 616 }, L"MAP1_GROUND_2" },
+    { { 404, 512, 449, 616 }, L"MAP1_PILLAR" },
+    //{ { 528, 545, 611, 632 }, L"MAP1_GROUND_3" }, 사용 X 
+    { { 594, 545, 1018, 618 }, L"MAP1_MONSTER_AREA" },
+
+    // =========================
+    // PNG23 두 번째 맵 충돌체
+    // PNG23은 월드 x = 1000부터 시작하므로, 화면에서 보이는 x좌표에 +1000을 해줌
+    // 사진 보고 대충 맞춘 값이라 F1 눌러서 좌표 확인하면서 조금씩 조절하면 됨
+    // =========================
+
+    // 왼쪽 아래 긴 땅
+    { { 1000, 545, 1666, 618 }, L"MAP2_LEFT_GROUND" },
+
+    // 가운데 아래 바위 기둥
+    { { 1617, 453, 1777, 618 }, L"MAP2_SMALL_ROCK" },
+
+    // 오른쪽 큰 절벽/벽
+    { { 1700, 135, 2000, 618 }, L"MAP2_BIG_CLIFF" },
+
+    // 오른쪽 큰 절벽 위에서 왼쪽으로 튀어나온 발판 부분
+    { { 1570, 114, 2000, 195 }, L"MAP2_TOP_LEDGE" },
+
+    // 나무 발판들
+    { { 1328, 439, 1750, 470 }, L"MAP2_WOOD_1" },
+    { { 1381, 339, 1555, 365 }, L"MAP2_WOOD_2" },
+    { { 1381, 239, 1556, 265 }, L"MAP2_WOOD_3" },
+    { { 1108, 185, 1339, 210 }, L"MAP2_WOOD_4" },
+    { { 1320, 112, 1501, 136 }, L"MAP2_WOOD_5" }
+};
+
+int g_solidBlockCount = sizeof(g_solidBlocks) / sizeof(g_solidBlocks[0]);
+
+// =========================
+// 2스테이지 충돌체: 88번(0~999), 89번(1000~1999)
+// 대충 잡은 값이라 F1 디버그 켜고 조금씩 조정하면 됨
+// =========================
+SolidBlock g_stage2SolidBlocks[] =
+{
+    // PNG88 달 있는 앞쪽 맵
+    { { 0, 482, 250, 650 }, L"S2_FRONT_LEFT_GROUND" },
+    { { 345, 482, 1000, 650 }, L"S2_FRONT_MIDDLE_PLATFORM" },
+    { { 265, 482, 333, 650 }, L"S2_FRONT_BOTTOM_GROUND" },
+    { { 424, 329, 685, 650 }, L"S2_FRONT_ROCK" },
+    { { 908, 329, 1000, 650 }, L"S2_FRONT_RIGHT_LOW" },
+
+    // 발판 
+    { { 76, 225, 180, 261 }, L"MAP_WOOD1" },
+
+    { { 180, 300, 262, 334 }, L"MAP_WOOD2" },
+    { { 732, 233, 851, 270 }, L"MAP_WOOD3" },
+
+    // PNG89 달 없는 뒤쪽 맵
+
+    { { 995, 358, 1230, 650 }, L"S2_BACK_LEFT_GROUND" },
+
+
+    { { 1000, 537, 2000, 650 }, L"S2_BACK_SMALL_PILLAR" },
+    { { 1703, 529, 1771, 650 }, L"S2_BACK_LEFT_LOW" },
+    { { 1810,529, 1880, 650 }, L"S2_BACK_CENTER_BUILDING" },
+
+    { { 1730, 330, 2000, 391 }, L"S2_BACK_RIGHT_LOW" },
+
+    //발판
+    { { 1330, 283, 1581, 337 }, L"MAP_WOOD4" },
+
+};
+
+int g_stage2SolidBlockCount = sizeof(g_stage2SolidBlocks) / sizeof(g_stage2SolidBlocks[0]);
+
+// =========================
+// 3스테이지 충돌체: 90번(0~999), 91번(1000~1999)
+// 90/91 배경을 BG_PART_W x BG_PART_H로 늘려 그리는 기준 좌표
+// =========================
+SolidBlock g_stage3SolidBlocks[] =
+{
+    // =========================
+    // 3스테이지 충돌체 수정본
+    // 큰 네모로 막지 않고, 실제 발판/기둥 위주로 작게 잡음
+    // F1 디버그 빨간 박스가 너무 커 보이던 부분을 줄임
+    // =========================
+
+    // PNG90 첫 번째 구간: x = 0 ~ 999
+    { { 0, 585, 265, 650 }, L"S3_90_LEFT_BOTTOM_GROUND" },
+    { { 410, 586, 464, 650 }, L"S3_90_LEFT_LEDGE" },
+    { { 498, 565, 553, 650 }, L"S3_90_CENTER_LONG_LEDGE" },
+    { { 644, 539, 702, 650 }, L"S3_90_CENTER_GROUND" },
+    { { 718, 539, 791, 650 }, L"S3_90_CENTER_PILLAR" },
+    { { 806, 539, 875, 650 }, L"S3_90_RIGHT_LEDGE" },
+    { { 892, 539, 1000, 650 }, L"S3_90_RIGHT_GROUND" },
+
+
+    // 화면 끝에 걸리는 정도만 막는 얇은 벽
+    // 예전처럼 x=0~115, x=945~1000 전체를 막으면 충돌범위가 너무 어색하게 커짐
+    { { 0, 0, 12, 650 }, L"S3_90_LEFT_LIMIT" },
+
+    // PNG91 두 번째 구간: x = 1000 ~ 1999
+   { { 1000, 536, 2000, 650 }, L"S3_90_TOP_LEDGE" },
+   { { 1182, 406, 2000, 650 }, L"S3_91_LEFT_BOTTOM_GROUND" },
+   { { 1137, 476, 1190, 491 }, L"S3_91_MAIN_LEDGE WOOD" },
+   { { 1100, 406, 1187, 424 }, L"S3_91_MAIN_GROUNDWOOD" },
+   { { 1175, 406, 2000 , 650 }, L"S3_91_CENTER_PILLAR" },
+
+   { { 1852, 280, 1900, 402 }, L"S3_91_RIGHT_LEDGE" },
+   { { 1635, 425, 2000, 650 }, L"S3_91_RIGHT_GROUND" },
+     { { 1660, 280, 1723, 405 }, L"S3_91_RIGHT_OBSTACLE" },
+         { { 1660, 280, 1736, 348 }, L"S3_91_RIGHT_OBSTACLE.2" },
+             { { 1761, 280, 1900, 348 }, L"S3_91_RIGHT_WALL" },
+   { { 1805, 123, 1890, 146 }, L"S3_91_TOP_LEDGE" },
+
+   // 맵 끝 벽만 얇게
+   { { 1900, 0, 2000, 650 }, L"S3_91_RIGHT_LIMIT" }
+};
+
+int g_stage3SolidBlockCount = sizeof(g_stage3SolidBlocks) / sizeof(g_stage3SolidBlocks[0]);
+
+// =========================
+// 4스테이지 충돌체: 92번 보스전 배경
+// 보스전용이라 바닥 하나만 길게 깔아둠
+// =========================
+SolidBlock g_stage4SolidBlocks[] =
+{
+    // 4스테이지는 92번 배경 하나만 사용하는 보스전 맵이라 x = 0 ~ 1000까지만 사용
+    { { 0, 545, 1000, 650 }, L"S4_BOSS_GROUND" },
+    { { 0, 0, 12, 650 }, L"S4_LEFT_LIMIT" },
+    { { 988, 0, 1000, 650 }, L"S4_RIGHT_LIMIT" }
+};
+
+int g_stage4SolidBlockCount = sizeof(g_stage4SolidBlocks) / sizeof(g_stage4SolidBlocks[0]);
+
+SolidBlock* GetCurrentSolidBlocks(int* count)
+{
+    if (g_currentStage == 2)
+    {
+        *count = g_stage2SolidBlockCount;
+        return g_stage2SolidBlocks;
+    }
+
+    if (g_currentStage == 3)
+    {
+        *count = g_stage3SolidBlockCount;
+        return g_stage3SolidBlocks;
+    }
+
+    if (g_currentStage == 4)
+    {
+        *count = g_stage4SolidBlockCount;
+        return g_stage4SolidBlocks;
+    }
+
+    *count = g_solidBlockCount;
+    return g_solidBlocks;
+}
+
 
 // 카메라 / 월드 크기
 // 배경 PNG22가 0~999, PNG23이 1000~1999에 붙는 구조
@@ -799,6 +794,14 @@ const int BG_PART_W = 1000;
 const int BG_PART_H = 650;
 const int WORLD_W = BG_PART_W * 2;
 const int WORLD_H = BG_PART_H;
+
+int GetCurrentWorldW()
+{
+    if (g_currentStage == 4)
+        return BG_PART_W;
+
+    return WORLD_W;
+}
 
 int cameraX = 0;
 
@@ -919,26 +922,410 @@ int g_mouseScreenY = 0;
 int g_mouseWorldX = 0;
 int g_mouseWorldY = 0;
 
-const int STAGE_FADE_TICK_MAX = 28;
-const int STAGE_TITLE_TICK_MAX = 70;
-const int STAGE_CLEAR_TICK_MAX = 55;
-const int RESCUE_EFFECT_TICK_MAX = 28;
-int g_stageFadeTick = STAGE_FADE_TICK_MAX;
-int g_stageTitleTick = STAGE_TITLE_TICK_MAX;
-int g_stageClearTick = 0;
-int g_rescueEffectTick = 0;
-int g_rescueEffectX = 0;
-int g_rescueEffectY = 0;
-
-const int STAR_TRANSITION_CLOSE_TICK = 20;
-const int STAR_TRANSITION_OPEN_TICK = 20;
-bool g_starTransitionActive = false;
-bool g_starTransitionMapChanged = false;
-int g_starTransitionTick = 0;
-int g_starTransitionTargetStage = 1;
-HWND g_starTransitionHwnd = NULL;
-
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
+
+Image* LoadPNGFromResource(HINSTANCE hInst, int resourceID)
+{
+    HRSRC hResource = FindResource(hInst, MAKEINTRESOURCE(resourceID), L"PNG");
+
+    if (hResource == NULL)
+        return NULL;
+
+    DWORD imageSize = SizeofResource(hInst, hResource);
+
+    if (imageSize == 0)
+        return NULL;
+
+    HGLOBAL hGlobal = LoadResource(hInst, hResource);
+
+    if (hGlobal == NULL)
+        return NULL;
+
+    void* pResourceData = LockResource(hGlobal);
+
+    if (pResourceData == NULL)
+        return NULL;
+
+    HGLOBAL hBuffer = GlobalAlloc(GMEM_MOVEABLE, imageSize);
+
+    if (hBuffer == NULL)
+        return NULL;
+
+    void* pBuffer = GlobalLock(hBuffer);
+
+    if (pBuffer == NULL)
+    {
+        GlobalFree(hBuffer);
+        return NULL;
+    }
+
+    CopyMemory(pBuffer, pResourceData, imageSize);
+    GlobalUnlock(hBuffer);
+
+    IStream* pStream = NULL;
+
+    if (CreateStreamOnHGlobal(hBuffer, TRUE, &pStream) != S_OK)
+    {
+        GlobalFree(hBuffer);
+        return NULL;
+    }
+
+    Image* image = Image::FromStream(pStream);
+
+    pStream->Release();
+
+    if (image == NULL || image->GetLastStatus() != Ok)
+    {
+        delete image;
+        return NULL;
+    }
+
+    return image;
+}
+
+RECT MakeRectFromXYWH(int x, int y, int w, int h)
+{
+    RECT rc;
+
+    rc.left = x;
+    rc.top = y;
+    rc.right = x + w;
+    rc.bottom = y + h;
+
+    return rc;
+}
+
+bool IsRectHit(RECT a, RECT b)
+{
+    if (a.right <= b.left) return false;
+    if (a.left >= b.right) return false;
+    if (a.bottom <= b.top) return false;
+    if (a.top >= b.bottom) return false;
+
+    return true;
+}
+
+bool HitSolidBlock(RECT rc, RECT* hitBlock)
+{
+    int blockCount = 0;
+    SolidBlock* blocks = GetCurrentSolidBlocks(&blockCount);
+
+    for (int i = 0; i < blockCount; i++)
+    {
+        if (IsRectHit(rc, blocks[i].rc))
+        {
+            if (hitBlock != NULL)
+            {
+                *hitBlock = blocks[i].rc;
+            }
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
+bool IsWoodPlatformBlock(LPCWSTR name)
+{
+    if (name == NULL)
+        return false;
+
+    // 이름에 WOOD가 들어간 충돌체는 나무발판으로 판단
+    if (wcsstr(name, L"WOOD") != NULL)
+        return true;
+
+    return false;
+}
+
+bool HitSolidBlockForBalloon(RECT rc, RECT* hitBlock)
+{
+    int blockCount = 0;
+    SolidBlock* blocks = GetCurrentSolidBlocks(&blockCount);
+
+    for (int i = 0; i < blockCount; i++)
+    {
+        // 풍선 상태에서는 나무발판만 통과 가능하게 함
+        if (IsWoodPlatformBlock(blocks[i].name))
+            continue;
+
+        if (IsRectHit(rc, blocks[i].rc))
+        {
+            if (hitBlock != NULL)
+            {
+                *hitBlock = blocks[i].rc;
+            }
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool FindGroundUnderHitBox(RECT hitBox, int* groundY)
+{
+    int bestY = 999999;
+    bool found = false;
+
+    int blockCount = 0;
+    SolidBlock* blocks = GetCurrentSolidBlocks(&blockCount);
+
+    for (int i = 0; i < blockCount; i++)
+    {
+        RECT block = blocks[i].rc;
+
+        bool overlapX = hitBox.right > block.left && hitBox.left < block.right;
+
+        if (overlapX)
+        {
+            if (hitBox.bottom >= block.top && hitBox.bottom <= block.top + 20)
+            {
+                if (block.top < bestY)
+                {
+                    bestY = block.top;
+                    found = true;
+                }
+            }
+        }
+    }
+
+    if (found)
+    {
+        *groundY = bestY;
+        return true;
+    }
+
+    return false;
+}
+
+RECT GetKirbyHitBox(int x, int y)
+{
+    RECT rc;
+
+    rc.left = x + KIRBY_HIT_LEFT;
+    rc.top = y + KIRBY_HIT_TOP;
+    rc.right = x + kirbyW - KIRBY_HIT_RIGHT;
+    rc.bottom = y + kirbyH - KIRBY_HIT_BOTTOM;
+
+    return rc;
+}
+
+RECT GetMonsterHitBox(int x, int y, int w, int h)
+{
+    RECT rc;
+
+    rc.left = x + MONSTER_HIT_LEFT;
+    rc.top = y + MONSTER_HIT_TOP;
+    rc.right = x + w - MONSTER_HIT_RIGHT;
+    rc.bottom = y + h - MONSTER_HIT_BOTTOM;
+
+    return rc;
+}
+
+bool IsMoving()
+{
+    return moveLeft || moveRight || moveUp || moveDown;
+}
+
+bool IsKirbyWalkMoving()
+{
+    return moveLeft || moveRight;
+}
+
+void StopMove()
+{
+    moveLeft = false;
+    moveRight = false;
+    moveUp = false;
+    moveDown = false;
+}
+
+void StartKirbyFallGameOver()
+{
+    if (isGameOver)
+        return;
+
+    g_kirbyFallGameOver = true;
+    isGameOver = true;
+    g_gameOverHandled = false;
+    gameOverTick = 0;
+
+    StopMove();
+    isAbsorb = false;
+    isSpace = false;
+    isSpaceRelease = false;
+    isCrouch = false;
+    balloonTick = 0;
+    spaceKeyHeld = false;
+    kirbyVY = 0.0f;
+}
+
+bool IsKirbyBelowDeathLine()
+{
+    return kirbyY > WORLD_H + 80;
+}
+
+void StartJump()
+{
+    if (isOnGround && !jumpKeyDown && !isAbsorb && !isCrouch)
+    {
+        kirbyVY = jumpPower;
+        isOnGround = false;
+        jumpKeyDown = true;
+    }
+}
+
+void UpdateDashWindFrame()
+{
+    if (isDash && IsMoving() && !isAbsorb && !isCrouch)
+    {
+        dashFrameTick++;
+
+        if (dashFrameTick >= 10)
+        {
+            dashFrameTick = 0;
+
+            if (dashFrameIndex < dashFrameCount - 1)
+            {
+                dashFrameIndex++;
+            }
+        }
+    }
+    else
+    {
+        dashFrameIndex = 0;
+        dashFrameTick = 0;
+    }
+}
+
+void UpdateSpaceRelease()
+{
+    if (!isSpaceRelease)
+        return;
+
+    spaceReleaseTick++;
+
+    if (spaceReleaseTick >= SPACE_RELEASE_DURATION)
+    {
+        isSpaceRelease = false;
+        spaceReleaseTick = 0;
+    }
+}
+
+void StopBalloonWithRelease()
+{
+    if (isSpace)
+    {
+        isSpaceRelease = true;
+        spaceReleaseTick = 0;
+    }
+
+    isSpace = false;
+    balloonTick = 0;
+
+    spaceFrameIndex = 0;
+    spaceStartFrameDone = false;
+
+    fireBalloonFrameIndex = 0;
+    fireBalloonStartFrameDone = false;
+
+    bombBalloonFrameIndex = 0;
+    bombBalloonStartFrameDone = false;
+
+    kirbyVY = 0.0f;
+    moveUp = false;
+    moveDown = false;
+}
+
+void UpdateBalloonLimit()
+{
+    if (!isSpace)
+    {
+        balloonTick = 0;
+        return;
+    }
+
+    balloonTick++;
+
+    if (balloonTick >= BALLOON_DURATION_TICK)
+    {
+        StopBalloonWithRelease();
+    }
+}
+
+void UpdateAbsorbFrontEffect()
+{
+    if (!isAbsorb)
+    {
+        absorbFrontEffectIndex = 0;
+        absorbFrontEffectTick = 0;
+        return;
+    }
+
+    absorbFrontEffectTick++;
+
+    if (absorbFrontEffectTick >= ABSORB_FRONT_EFFECT_FIRST_DURATION)
+    {
+        absorbFrontEffectIndex = 1;
+    }
+    else
+    {
+        absorbFrontEffectIndex = 0;
+    }
+}
+
+void SetKirbyNormalSizeKeepBottom()
+{
+    int oldBottom = kirbyY + kirbyH;
+
+    kirbyW = NORMAL_KIRBY_W;
+    kirbyH = NORMAL_KIRBY_H;
+    kirbyY = oldBottom - kirbyH;
+
+    if (kirbyY < 0)
+        kirbyY = 0;
+
+    if (kirbyY + kirbyH > WORLD_H)
+        kirbyY = WORLD_H - kirbyH;
+}
+
+void SetKirbyPowerSizeKeepBottom()
+{
+    int oldBottom = kirbyY + kirbyH;
+
+    kirbyW = POWER_KIRBY_W;
+    kirbyH = POWER_KIRBY_H;
+    kirbyY = oldBottom - kirbyH;
+
+    if (kirbyY < 0)
+        kirbyY = 0;
+
+    int currentWorldW = GetCurrentWorldW();
+
+    if (kirbyX + kirbyW > currentWorldW)
+        kirbyX = currentWorldW - kirbyW;
+
+    if (kirbyY + kirbyH > WORLD_H)
+        kirbyY = WORLD_H - kirbyH;
+}
+
+void UpdatePowerWait()
+{
+    if (!isPowerKirby)
+        return;
+
+    if (canPowerShoot)
+        return;
+
+    powerWaitTick++;
+
+    if (powerWaitTick >= POWER_WAIT_TICK_MAX)
+    {
+        canPowerShoot = true;
+    }
+}
 
 RECT GetPowerProjectileSweepRect();
 void CheckPowerProjectileHitMonsters();
@@ -966,57 +1353,745 @@ void DrawBombExplosions(Graphics& graphics);
 void SpawnBombExplosion(int x, int y);
 void CheckBombExplosionHitKirby(RECT explosionRc);
 void CheckBombHitMonsters(RECT bombRc, bool fromEnemy);
+void StartFireAttackPose()
+{
+    if (!isFireKirby)
+        return;
+
+    isFireAttackPose = true;
+    fireAttackPoseTick = 0;
+}
+
+void StartFireBreath()
+{
+    if (!isFireKirby)
+        return;
+
+    StartFireAttackPose();
+
+    isFireBreath = true;
+    fireBreathTick = 0;
+}
+
+RECT GetFireBreathRect()
+{
+    RECT rc;
+
+    int breathW = 58;
+    int breathH = 36;
+    int breathY = kirbyY + kirbyH / 2 - breathH / 2;
+
+    if (kirbyFaceLeft)
+    {
+        rc.left = kirbyX - breathW + 5;
+        rc.right = kirbyX + 5;
+    }
+    else
+    {
+        rc.left = kirbyX + kirbyW - 5;
+        rc.right = rc.left + breathW;
+    }
+
+    rc.top = breathY;
+    rc.bottom = breathY + breathH;
+
+    return rc;
+}
+
+void SpawnFireBall()
+{
+    if (!isFireKirby)
+        return;
+
+    if (isFireBallActive)
+        return;
+
+    StartFireAttackPose();
+
+    fireBallDir = kirbyFaceLeft ? -1 : 1;
+    fireBallW = 40;
+    fireBallH = 28;
+
+    if (kirbyFaceLeft)
+        fireBallX = kirbyX - fireBallW + 4;
+    else
+        fireBallX = kirbyX + kirbyW - 4;
+
+    fireBallPrevX = fireBallX;
+    fireBallY = kirbyY + kirbyH / 2 - fireBallH / 2;
+    isFireBallActive = true;
+}
+
+RECT GetFireBallSweepRect()
+{
+    RECT rc;
+
+    int oldLeft = fireBallPrevX;
+    int oldRight = fireBallPrevX + fireBallW;
+    int newLeft = fireBallX;
+    int newRight = fireBallX + fireBallW;
+
+    rc.left = oldLeft < newLeft ? oldLeft : newLeft;
+    rc.right = oldRight > newRight ? oldRight : newRight;
+    rc.top = fireBallY;
+    rc.bottom = fireBallY + fireBallH;
+
+    return rc;
+}
+
+void UpdateFireKirbyStates()
+{
+    if (isFireAttackPose)
+    {
+        fireAttackPoseTick++;
+
+        if (fireAttackPoseTick >= FIRE_ATTACK_POSE_DURATION)
+        {
+            fireAttackPoseTick = 0;
+            isFireAttackPose = false;
+        }
+    }
+
+    if (isFireTransform)
+    {
+        fireTransformTick++;
+
+        if (fireTransformTick >= FIRE_TRANSFORM_DURATION)
+        {
+            fireTransformTick = 0;
+            isFireTransform = false;
+            isFireKirby = true;
+            kirbyAbilityType = 1;
+        }
+    }
+
+    if (isBombTransform)
+    {
+        bombTransformTick++;
+
+        if (bombTransformTick >= BOMB_TRANSFORM_DURATION)
+        {
+            bombTransformTick = 0;
+            isBombTransform = false;
+            isBombKirby = true;
+            kirbyAbilityType = 2;
+        }
+    }
+
+    if (isFireBreath)
+    {
+        fireBreathTick++;
+
+        if (fireBreathTick >= FIRE_BREATH_DURATION)
+        {
+            fireBreathTick = 0;
+            isFireBreath = false;
+        }
+    }
+
+    if (isFireBallActive)
+    {
+        fireBallPrevX = fireBallX;
+        fireBallX += fireBallSpeed * fireBallDir;
+
+        if (fireBallX + fireBallW < 0 || fireBallX > GetCurrentWorldW())
+            isFireBallActive = false;
+    }
+}
+
+void SpawnEnemyFireBall(int x, int y, int dir)
+{
+    for (int i = 0; i < ENEMY_FIREBALL_MAX; i++)
+    {
+        if (!g_enemyFireBalls[i].active)
+        {
+            g_enemyFireBalls[i].active = true;
+            g_enemyFireBalls[i].x = x;
+            g_enemyFireBalls[i].y = y;
+            g_enemyFireBalls[i].prevX = x;
+            g_enemyFireBalls[i].w = 36;
+            g_enemyFireBalls[i].h = 24;
+            g_enemyFireBalls[i].dir = dir;
+            g_enemyFireBalls[i].speed = 7;
+            return;
+        }
+    }
+}
+
+RECT GetEnemyFireBallSweepRect(int index)
+{
+    RECT rc;
+
+    int oldLeft = g_enemyFireBalls[index].prevX;
+    int oldRight = g_enemyFireBalls[index].prevX + g_enemyFireBalls[index].w;
+    int newLeft = g_enemyFireBalls[index].x;
+    int newRight = g_enemyFireBalls[index].x + g_enemyFireBalls[index].w;
+
+    rc.left = oldLeft < newLeft ? oldLeft : newLeft;
+    rc.right = oldRight > newRight ? oldRight : newRight;
+    rc.top = g_enemyFireBalls[index].y;
+    rc.bottom = g_enemyFireBalls[index].y + g_enemyFireBalls[index].h;
+
+    return rc;
+}
+
+void UpdateEnemyFireBalls()
+{
+    for (int i = 0; i < ENEMY_FIREBALL_MAX; i++)
+    {
+        if (!g_enemyFireBalls[i].active)
+            continue;
+
+        g_enemyFireBalls[i].prevX = g_enemyFireBalls[i].x;
+        g_enemyFireBalls[i].x += g_enemyFireBalls[i].speed * g_enemyFireBalls[i].dir;
+
+        if (g_enemyFireBalls[i].x + g_enemyFireBalls[i].w < 0 ||
+            g_enemyFireBalls[i].x > GetCurrentWorldW())
+        {
+            g_enemyFireBalls[i].active = false;
+        }
+    }
+}
+
+void CheckEnemyFireBallsHitKirby()
+{
+    // 빨아들이기 중이어도 적 공격에는 맞게 함
+    if (isKirbyHit || kirbyHitCooldownTick > 0)
+        return;
+
+    RECT kirbyRc = GetKirbyBodyRect();
+
+    for (int i = 0; i < ENEMY_FIREBALL_MAX; i++)
+    {
+        if (!g_enemyFireBalls[i].active)
+            continue;
+
+        RECT fireRc = GetEnemyFireBallSweepRect(i);
+
+        if (IsRectHit(kirbyRc, fireRc))
+        {
+            g_enemyFireBalls[i].active = false;
+            StartKirbyHitEffect();
+            return;
+        }
+    }
+}
+
+void StartKirbyHitEffect()
+{
+    if (g_invincibleMode)
+        return;
+
+    if (kirbyHitCooldownTick > 0)
+        return;
+
+    if (isGameOver)
+        return;
+
+    // 피격 프레임 표시
+    isKirbyHit = true;
+    kirbyHitTick = 0;
+    kirbyHitCooldownTick = KIRBY_HIT_COOLDOWN;
+
+    // 몬스터에게 공격받을 때마다 실제 체력 목표값만 15% 감소
+    // 화면 체력은 UpdateHPBarAnimation()에서 조금씩 따라 내려감
+    kirbyHP -= KIRBY_DAMAGE;
+
+    if (kirbyHP < 0)
+    {
+        kirbyHP = 0;
+    }
+}
+
+void UpdateKirbyHitEffect()
+{
+    if (kirbyHitCooldownTick > 0)
+        kirbyHitCooldownTick--;
+
+    if (!isKirbyHit)
+        return;
+
+    kirbyHitTick++;
+
+    if (kirbyHitTick >= KIRBY_HIT_DURATION)
+    {
+        kirbyHitTick = 0;
+        isKirbyHit = false;
+    }
+}
+
+void ApplyKirbyStatusDamage(int damage)
+{
+    if (g_invincibleMode)
+        return;
+
+    if (isGameOver)
+        return;
+
+    kirbyHP -= damage;
+
+    if (kirbyHP < 0)
+        kirbyHP = 0;
+}
+
+void StartKirbySlow()
+{
+    g_kirbySlowTick = 120; // 약 4.8초
+}
+
+void StartKirbyBurn()
+{
+    g_kirbyBurnTick = 105; // 약 4.2초
+    g_kirbyBurnDamageTick = 0;
+}
+
+void UpdateKirbyStatusEffects()
+{
+    if (g_kirbySlowTick > 0)
+        g_kirbySlowTick--;
+
+    if (g_kirbyBurnTick > 0)
+    {
+        g_kirbyBurnTick--;
+        g_kirbyBurnDamageTick++;
+
+        if (g_kirbyBurnDamageTick >= 18)
+        {
+            g_kirbyBurnDamageTick = 0;
+            ApplyKirbyStatusDamage(3);
+        }
+    }
+}
+
+void UpdateHPBarAnimation()
+{
+    // 실제 체력 kirbyHP까지 보이는 체력 kirbyDisplayHP를 조금씩 줄임
+    if (kirbyDisplayHP > (float)kirbyHP)
+    {
+        kirbyDisplayHP -= HP_ANIM_SPEED;
+
+        if (kirbyDisplayHP < (float)kirbyHP)
+            kirbyDisplayHP = (float)kirbyHP;
+    }
+
+    if (kirbyDisplayHP < 0.0f)
+        kirbyDisplayHP = 0.0f;
+
+    // 보이는 체력까지 0이 된 뒤에 게임오버 처리 시작
+    if (!isGameOver && kirbyHP <= 0 && kirbyDisplayHP <= 0.0f)
+    {
+        isGameOver = true;
+        g_gameOverHandled = false;
+        gameOverTick = 0;
+    }
+}
+
+RECT GetKirbyBodyRect()
+{
+    RECT rc;
+
+    rc.left = kirbyX;
+    rc.top = kirbyY;
+    rc.right = kirbyX + kirbyW;
+    rc.bottom = kirbyY + kirbyH;
+
+    return rc;
+}
+
+
 void UpdateCamera(HWND hWnd);
 void DrawWorldImage(Graphics& graphics, Image* image, int x, int y, int w, int h);
+
+RECT GetChildRect(RescueChild child)
+{
+    RECT rc;
+    rc.left = child.x;
+    rc.top = child.y;
+    rc.right = child.x + child.w;
+    rc.bottom = child.y + child.h;
+    return rc;
+}
+
+RECT GetDoorRect(StageDoor door)
+{
+    RECT rc;
+    rc.left = door.x;
+    rc.top = door.y;
+    rc.right = door.x + door.w;
+    rc.bottom = door.y + door.h;
+    return rc;
+}
 
 void InitMonsters();
 
 void InitBossObjects();
 void UpdateBossObjects();
 void DrawBossObjects(Graphics& graphics);
-void StartBossBerserkHeal();
-void UpdateBossBerserkHeal();
 void CheckKirbyAttacksHitBoss();
 void ResetBossProjectiles();
-void ResetDanceStage();
-void UpdateDanceStage();
-void DrawDanceKirby(Graphics& graphics);
-void StartStageTransitionEffect();
-void StartStarStageTransition(HWND hWnd, int targetStage);
-void UpdateStarStageTransition(HWND hWnd);
-void DrawStarStageTransition(Graphics& graphics, int screenW, int screenH);
-void ChangeStageNow(HWND hWnd, int targetStage);
-void StartStageClearMessage();
-void StartRescueEffect(int x, int y);
-void AddGameScore(int score);
-void PlayGameSound(int soundId);
-void RestartCurrentStage(HWND hWnd);
-void StartRetrySequence();
-void RespawnKirbyAtRetryPoint(HWND hWnd);
-void UpdateRetryCountdown(HWND hWnd);
-void ResetStageProjectiles();
-void SyncStageBGM();
-void ResetStageGimmicks();
-void UpdateStageGimmicks(HWND hWnd);
-void DrawStageGimmicks(Graphics& graphics, int screenW, int screenH);
-void DrawDarkVisionOverlay(Graphics& graphics, int screenW, int screenH);
-void StartCameraShake(int power, int duration);
-void UpdateCameraShake();
-int GetCameraDrawOffsetX();
-int GetCameraDrawOffsetY();
-void StartCameraPush(int dir, int power, int duration);
-void UpdateCameraPush();
-int GetCameraPushOffsetX();
-void DrawScreenEdgeEffects(Graphics& graphics, int screenW, int screenH);
 
-// 보스 보상 문 변수는 아래쪽 보스전 코드에서 실제로 정의됨.
-// CheckDoorTouch가 그보다 위에 있어서 여기서는 미리 알려만 줌.
-extern bool g_rewardDoorActive;
-extern bool g_rewardDoorOpened;
-extern int g_rewardDoorX;
-extern int g_rewardDoorY;
-extern int g_rewardDoorW;
-extern int g_rewardDoorH;
+void InitStage1RescueObjects()
+{
+    // 81번 남자 아이: 두 번째 나무 발판 위쪽에 배치
+    g_stage1Boy.active = true;
+    g_stage1Boy.rescued = false;
+    g_stage1Boy.w = 47;
+    g_stage1Boy.h = 59;
+    g_stage1Boy.x = 1450;
+    g_stage1Boy.y = 339 - g_stage1Boy.h + 7;
+
+    // 84~87번 문: 1스테이지 맨 오른쪽 언덕 위에 배치
+    g_stage1Door.active = true;
+    g_stage1Door.opening = false;
+    g_stage1Door.opened = false;
+    g_stage1Door.w = 81;
+    g_stage1Door.h = 101;
+    g_stage1Door.x = 1868;
+    g_stage1Door.y = 114 - g_stage1Door.h + 7;
+    g_stage1Door.frameIndex = 0;
+    g_stage1Door.tick = 0;
+
+    g_stage1ChildTotal = 1;
+    g_stage1ChildRescued = 0;
+}
+
+void InitStage2RescueObjects()
+{
+    for (int i = 0; i < STAGE2_CHILD_COUNT; i++)
+    {
+        g_stage2Children[i].active = true;
+        g_stage2Children[i].rescued = false;
+        g_stage2Children[i].w = 47;
+        g_stage2Children[i].h = 59;
+    }
+
+    // 88번 달 있는 앞쪽 맵
+    g_stage2Children[0].x = 105;
+    g_stage2Children[0].y = 370 - g_stage2Children[0].h + 7;
+
+    g_stage2Children[1].x = 530;
+    g_stage2Children[1].y = 342 - g_stage2Children[1].h + 7;
+
+    // 89번 달 없는 뒤쪽 맵
+    g_stage2Children[2].x = 1435;
+    g_stage2Children[2].y = 286 - g_stage2Children[2].h + 7;
+
+    g_stage2Children[3].x = 1931;
+    g_stage2Children[3].y = 546 - g_stage2Children[3].h + 7;
+
+    // 89번 달 없는 맵의 오른쪽 위 빨간 표시 위치에 문 배치
+    g_stage2Door.active = true;
+    g_stage2Door.opening = false;
+    g_stage2Door.opened = false;
+    g_stage2Door.w = 81;
+    g_stage2Door.h = 101;
+    g_stage2Door.x = 1871;
+    g_stage2Door.y = 332 - g_stage2Door.h + 7;
+    g_stage2Door.frameIndex = 0;
+    g_stage2Door.tick = 0;
+
+    g_stage2ChildTotal = STAGE2_CHILD_COUNT;
+    g_stage2ChildRescued = 0;
+}
+
+void InitStage3RescueObjects()
+{
+    // 3스테이지 오른쪽 위쪽 발판에 문 배치
+    g_stage3Door.active = true;
+    g_stage3Door.opening = false;
+    g_stage3Door.opened = true;
+    g_stage3Door.w = 81;
+    g_stage3Door.h = 101;
+    g_stage3Door.x = 1810;
+    g_stage3Door.y = 126 - g_stage3Door.h + 7;
+    g_stage3Door.frameIndex = DOOR_FRAME_COUNT - 1;
+    g_stage3Door.tick = 0;
+}
+
+
+void InitRescueObjects()
+{
+    if (g_currentStage == 2)
+        InitStage2RescueObjects();
+    else if (g_currentStage == 3)
+        InitStage3RescueObjects();
+    else if (g_currentStage == 4)
+    {
+        // 4스테이지는 보스전 배경만 먼저 사용. 문/학생 없음.
+    }
+    else
+        InitStage1RescueObjects();
+
+    g_isChangingMap = false;
+    g_rescueAnimTick = 0;
+}
+
+void CheckRescueChildTouch()
+{
+    RECT kirbyRc = GetKirbyBodyRect();
+
+    if (g_currentStage == 1)
+    {
+        if (!g_stage1Boy.active || g_stage1Boy.rescued)
+            return;
+
+        RECT childRc = GetChildRect(g_stage1Boy);
+
+        if (IsRectHit(kirbyRc, childRc))
+        {
+            g_stage1Boy.active = false;
+            g_stage1Boy.rescued = true;
+            g_stage1ChildRescued++;
+
+            if (g_stage1ChildRescued >= g_stage1ChildTotal)
+            {
+                g_stage1Door.opening = true;
+            }
+        }
+        return;
+    }
+
+    if (g_currentStage == 2)
+    {
+        for (int i = 0; i < STAGE2_CHILD_COUNT; i++)
+        {
+            if (!g_stage2Children[i].active || g_stage2Children[i].rescued)
+                continue;
+
+            RECT childRc = GetChildRect(g_stage2Children[i]);
+
+            if (IsRectHit(kirbyRc, childRc))
+            {
+                g_stage2Children[i].active = false;
+                g_stage2Children[i].rescued = true;
+                g_stage2ChildRescued++;
+
+                if (g_stage2ChildRescued >= g_stage2ChildTotal)
+                {
+                    g_stage2Door.opening = true;
+                }
+            }
+        }
+    }
+}
+
+void UpdateDoorOpen(StageDoor* door)
+{
+    if (door == NULL)
+        return;
+
+    if (door->opening && !door->opened)
+    {
+        door->tick++;
+
+        if (door->tick >= DOOR_OPEN_FRAME_TICK)
+        {
+            door->tick = 0;
+
+            if (door->frameIndex < DOOR_FRAME_COUNT - 1)
+            {
+                door->frameIndex++;
+            }
+            else
+            {
+                door->opened = true;
+                door->opening = false;
+            }
+        }
+    }
+}
+
+void UpdateRescueObjects()
+{
+    g_rescueAnimTick++;
+
+    if (g_currentStage == 1)
+    {
+        if (g_stage1ChildRescued >= g_stage1ChildTotal && !g_stage1Door.opened)
+        {
+            g_stage1Door.opening = true;
+        }
+
+        UpdateDoorOpen(&g_stage1Door);
+        return;
+    }
+
+    if (g_currentStage == 2)
+    {
+        if (g_stage2ChildRescued >= g_stage2ChildTotal && !g_stage2Door.opened)
+        {
+            g_stage2Door.opening = true;
+        }
+
+        UpdateDoorOpen(&g_stage2Door);
+        return;
+    }
+
+    if (g_currentStage == 3)
+    {
+        UpdateDoorOpen(&g_stage3Door);
+    }
+}
+
+void GoNextMap(HWND hWnd)
+{
+    if (g_isChangingMap)
+        return;
+
+    g_isChangingMap = true;
+
+    StopMove();
+    isAbsorb = false;
+    isSpace = false;
+    isSpaceRelease = false;
+    isCrouch = false;
+    balloonTick = 0;
+    spaceKeyHeld = false;
+
+    if (g_currentStage == 1)
+    {
+        // 능력 상태는 건드리지 않고 2스테이지로 이동
+        g_currentStage = 2;
+        kirbyX = 70;
+        kirbyY = 330;
+        kirbyVY = 0.0f;
+        cameraX = 0;
+        InitRescueObjects();
+        InitMonsters();
+        UpdateCamera(hWnd);
+        g_isChangingMap = false;
+        return;
+    }
+
+    if (g_currentStage == 2)
+    {
+        // 2스테이지 문에 들어가면 3스테이지로 이동
+        g_currentStage = 3;
+        kirbyX = 145;
+        kirbyY = 500;
+        kirbyVY = 0.0f;
+        cameraX = 0;
+        InitRescueObjects();
+        InitMonsters();
+        UpdateCamera(hWnd);
+        g_isChangingMap = false;
+        return;
+    }
+
+    if (g_currentStage == 3)
+    {
+        // 3스테이지 문에 들어가면 마지막 4스테이지/보스전으로 이동
+        g_currentStage = 4;
+        kirbyX = 80;
+        kirbyY = 480;
+        kirbyVY = 0.0f;
+        cameraX = 0;
+        InitRescueObjects();
+        InitMonsters();
+        UpdateCamera(hWnd);
+        g_isChangingMap = false;
+        return;
+    }
+
+    if (g_currentStage == 4)
+    {
+        g_isChangingMap = false;
+    }
+}
+
+void CheckDoorTouch(HWND hWnd)
+{
+    RECT kirbyRc = GetKirbyBodyRect();
+
+    if (g_currentStage == 1)
+    {
+        if (!g_stage1Door.active || !g_stage1Door.opened)
+            return;
+
+        RECT doorRc = GetDoorRect(g_stage1Door);
+        if (IsRectHit(kirbyRc, doorRc))
+        {
+            GoNextMap(hWnd);
+        }
+        return;
+    }
+
+    if (g_currentStage == 2)
+    {
+        if (!g_stage2Door.active || !g_stage2Door.opened)
+            return;
+
+        RECT doorRc = GetDoorRect(g_stage2Door);
+        if (IsRectHit(kirbyRc, doorRc))
+        {
+            GoNextMap(hWnd);
+        }
+        return;
+    }
+
+    if (g_currentStage == 3)
+    {
+        if (!g_stage3Door.active || !g_stage3Door.opened)
+            return;
+
+        RECT doorRc = GetDoorRect(g_stage3Door);
+        if (IsRectHit(kirbyRc, doorRc))
+        {
+            GoNextMap(hWnd);
+        }
+    }
+}
+
+void DrawDoorObject(Graphics& graphics, StageDoor door)
+{
+    if (!door.active)
+        return;
+
+    int frame = door.frameIndex;
+    if (frame < 0) frame = 0;
+    if (frame >= DOOR_FRAME_COUNT) frame = DOOR_FRAME_COUNT - 1;
+
+    DrawWorldImage(graphics, g_doorFrames[frame], door.x, door.y, door.w, door.h);
+}
+
+void DrawChildObject(Graphics& graphics, RescueChild child, int frameType)
+{
+    if (!child.active || child.rescued)
+        return;
+
+    Image* childFrame = g_studentBoyFrame;
+    if (frameType == 83 && g_studentGirlFrame != NULL)
+        childFrame = g_studentGirlFrame;
+
+    int shakeX = (g_rescueAnimTick / 4) % 2 == 0 ? -1 : 1;
+    DrawWorldImage(graphics, childFrame, child.x + shakeX, child.y, child.w, child.h);
+}
+
+void DrawRescueObjects(Graphics& graphics)
+{
+    if (g_currentStage == 1)
+    {
+        DrawDoorObject(graphics, g_stage1Door);
+        DrawChildObject(graphics, g_stage1Boy, 81);
+        return;
+    }
+
+    if (g_currentStage == 2)
+    {
+        DrawDoorObject(graphics, g_stage2Door);
+
+        for (int i = 0; i < STAGE2_CHILD_COUNT; i++)
+        {
+            DrawChildObject(graphics, g_stage2Children[i], g_stage2ChildFrameType[i]);
+        }
+        return;
+    }
+
+    if (g_currentStage == 3)
+    {
+        DrawDoorObject(graphics, g_stage3Door);
+    }
+}
 
 void UpdatePowerProjectile()
 {
@@ -1038,6 +2113,212 @@ void UpdatePowerProjectile()
     {
         isPowerProjectileActive = false;
     }
+}
+
+void UpdateKirbyPosition(HWND hWnd)
+{
+    if (isGameOver)
+        return;
+
+    if (isAbsorb)
+    {
+        return;
+    }
+
+    RECT rt;
+    GetClientRect(hWnd, &rt);
+
+    if (isSpace)
+    {
+        int curBalloonSpeed = isDash ? dashSpeed : balloonSpeed;
+
+        if (g_kirbySlowTick > 0)
+        {
+            curBalloonSpeed /= 2;
+            if (curBalloonSpeed < 1)
+                curBalloonSpeed = 1;
+        }
+
+        int nextX = kirbyX;
+        int nextY = kirbyY;
+
+        if (moveLeft)
+            nextX -= curBalloonSpeed;
+
+        if (moveRight)
+            nextX += curBalloonSpeed;
+
+        if (moveUp)
+            nextY -= curBalloonSpeed;
+
+        if (moveDown)
+            nextY += curBalloonSpeed;
+
+        RECT hitBlock;
+
+        // 풍선 상태: X축 충돌 검사
+        // 나무발판은 통과하지만, 땅/벽/절벽/기둥은 막음
+        RECT nextHitX = GetKirbyHitBox(nextX, kirbyY);
+
+        if (!HitSolidBlockForBalloon(nextHitX, &hitBlock))
+        {
+            kirbyX = nextX;
+        }
+        else
+        {
+            if (moveLeft)
+            {
+                kirbyX = hitBlock.right - KIRBY_HIT_LEFT;
+            }
+
+            if (moveRight)
+            {
+                kirbyX = hitBlock.left - (kirbyW - KIRBY_HIT_RIGHT);
+            }
+        }
+
+        // 풍선 상태: Y축 충돌 검사
+        RECT nextHitY = GetKirbyHitBox(kirbyX, nextY);
+
+        if (!HitSolidBlockForBalloon(nextHitY, &hitBlock))
+        {
+            kirbyY = nextY;
+        }
+        else
+        {
+            if (moveUp)
+            {
+                kirbyY = hitBlock.bottom - KIRBY_HIT_TOP;
+            }
+
+            if (moveDown)
+            {
+                kirbyY = hitBlock.top - (kirbyH - KIRBY_HIT_BOTTOM);
+            }
+        }
+
+        kirbyVY = 0.0f;
+        isOnGround = false;
+
+        if (kirbyX < 0)
+            kirbyX = 0;
+
+        int currentWorldW = GetCurrentWorldW();
+
+        if (kirbyX + kirbyW > currentWorldW)
+            kirbyX = currentWorldW - kirbyW;
+
+        if (kirbyY < 0)
+            kirbyY = 0;
+
+        // 아래쪽은 막지 않음. 구멍이나 화면 아래로 빠지면 낙사 처리
+        if (IsKirbyBelowDeathLine())
+            StartKirbyFallGameOver();
+
+        return;
+    }
+
+    int nextX = kirbyX;
+
+    if (!isCrouch)
+    {
+        int curSpeed = isDash ? dashSpeed : speed;
+
+        if (g_kirbySlowTick > 0)
+        {
+            curSpeed /= 2;
+            if (curSpeed < 1)
+                curSpeed = 1;
+        }
+
+        if (moveLeft)
+            nextX -= curSpeed;
+
+        if (moveRight)
+            nextX += curSpeed;
+    }
+
+    RECT nextHitX = GetKirbyHitBox(nextX, kirbyY);
+    RECT hitBlock;
+
+    if (!HitSolidBlock(nextHitX, &hitBlock))
+    {
+        kirbyX = nextX;
+    }
+    else
+    {
+        if (moveLeft)
+        {
+            kirbyX = hitBlock.right - KIRBY_HIT_LEFT;
+        }
+
+        if (moveRight)
+        {
+            kirbyX = hitBlock.left - (kirbyW - KIRBY_HIT_RIGHT);
+        }
+    }
+
+    if (kirbyX < 0)
+        kirbyX = 0;
+
+    int currentWorldW = GetCurrentWorldW();
+
+    if (kirbyX + kirbyW > currentWorldW)
+        kirbyX = currentWorldW - kirbyW;
+
+    kirbyVY += gravity;
+
+    if (kirbyVY > maxFallSpeed)
+        kirbyVY = maxFallSpeed;
+
+    int nextY = kirbyY + (int)kirbyVY;
+    RECT nextHitY = GetKirbyHitBox(kirbyX, nextY);
+
+    isOnGround = false;
+
+    if (!HitSolidBlock(nextHitY, &hitBlock))
+    {
+        kirbyY = nextY;
+    }
+    else
+    {
+        if (kirbyVY > 0)
+        {
+            kirbyY = hitBlock.top - (kirbyH - KIRBY_HIT_BOTTOM);
+            kirbyVY = 0;
+            isOnGround = true;
+        }
+        else if (kirbyVY < 0)
+        {
+            kirbyY = hitBlock.bottom - KIRBY_HIT_TOP;
+            kirbyVY = 0;
+        }
+    }
+
+    RECT currentHit = GetKirbyHitBox(kirbyX, kirbyY);
+    int groundY;
+
+    if (kirbyVY >= 0 && FindGroundUnderHitBox(currentHit, &groundY))
+    {
+        kirbyY = groundY - (kirbyH - KIRBY_HIT_BOTTOM);
+        kirbyVY = 0;
+        isOnGround = true;
+    }
+
+    // 예전처럼 WORLD_H에서 멈추게 하면 구멍으로 떨어져도 바닥에 붙어버림.
+    // 이제는 아래로 충분히 빠지면 게임오버 처리함.
+    if (IsKirbyBelowDeathLine())
+    {
+        StartKirbyFallGameOver();
+    }
+}
+
+bool IsInsideKirby(int mouseX, int mouseY)
+{
+    return mouseX >= kirbyX &&
+        mouseX <= kirbyX + kirbyW &&
+        mouseY >= kirbyY &&
+        mouseY <= kirbyY + kirbyH;
 }
 
 void UpdateCamera(HWND hWnd)
@@ -1063,11 +2344,773 @@ void UpdateCamera(HWND hWnd)
         cameraX = maxCameraX;
 }
 
-#include "monster.h"
-#include "monster.cpp"
-#include "player.cpp"
-#include "stage.cpp"
-#include "effect_manager.cpp"
+class Monster
+{
+public:
+    int x;
+    int y;
+    int w;
+    int h;
+
+    int speed;
+    int dir;
+
+    int frameIndex;
+    int frameCount;
+
+    int leftLimit;
+    int rightLimit;
+
+    int attackRange;
+    bool isAttack;
+
+    float vy;
+    bool onGround;
+
+    bool active;
+
+    // 몬스터 속성 번호. 0 = 일반, 1 = 불 속성
+    int monsterType;
+
+    // 불 속성 몬스터 원거리 공격
+    int rangedAttackCooldown;
+    int rangedAttackFrameTick;
+
+    // 폭탄 몬스터 투하 공격
+    int bombDropCooldown;
+
+    // 발사체에 맞아 죽는 연출 상태
+    bool isDeadEffect;
+    int deadEffectTick;
+
+    bool isJumpAttack;
+    int jumpAttackFrameIndex;
+    int jumpAttackCooldown;
+    float jumpAttackVX;
+
+    Monster()
+    {
+        x = 600;
+        y = 470;
+        w = 32;
+        h = 32;
+
+        speed = 2;
+        dir = -1;
+
+        frameIndex = 0;
+        frameCount = 4;
+
+        leftLimit = 546;
+        rightLimit = 914 - w;
+
+        attackRange = 140;
+        isAttack = false;
+
+        vy = 0.0f;
+        onGround = false;
+
+        active = true;
+        monsterType = 0;
+        rangedAttackCooldown = 90;
+        rangedAttackFrameTick = 0;
+        bombDropCooldown = 100;
+        isDeadEffect = false;
+        deadEffectTick = 0;
+
+        isJumpAttack = false;
+        jumpAttackFrameIndex = 0;
+        jumpAttackCooldown = 0;
+        jumpAttackVX = 0.0f;
+    }
+
+    void Init(int startX, int startY, int patrolLeft, int patrolRight, int startDir, int type = 0)
+    {
+        x = startX;
+        y = startY;
+        w = 32;
+        h = 32;
+
+        speed = 2;
+        dir = startDir;
+
+        frameIndex = 0;
+        frameCount = 4;
+
+        leftLimit = patrolLeft;
+        rightLimit = patrolRight - w;
+
+        attackRange = 140;
+        isAttack = false;
+
+        vy = 0.0f;
+        onGround = false;
+
+        active = true;
+        monsterType = type;
+        rangedAttackCooldown = 90;
+        rangedAttackFrameTick = 0;
+        bombDropCooldown = 100;
+        isDeadEffect = false;
+        deadEffectTick = 0;
+
+        isJumpAttack = false;
+        jumpAttackFrameIndex = 0;
+        jumpAttackCooldown = 0;
+        jumpAttackVX = 0.0f;
+    }
+
+    void StartDeadEffect()
+    {
+        active = false;
+        isAttack = false;
+        isJumpAttack = false;
+        vy = 0.0f;
+
+        isDeadEffect = true;
+        deadEffectTick = 0;
+    }
+
+    void UpdateDeadEffect()
+    {
+        if (!isDeadEffect)
+            return;
+
+        deadEffectTick++;
+
+        if (deadEffectTick >= MONSTER_DEAD_DURATION)
+        {
+            isDeadEffect = false;
+            deadEffectTick = 0;
+        }
+    }
+
+    bool IsKirbyInRangedAttackRange()
+    {
+        if (monsterType != 1)
+            return false;
+
+        int kirbyCenterX = kirbyX + kirbyW / 2;
+        int kirbyCenterY = kirbyY + kirbyH / 2;
+        int monsterCenterX = x + w / 2;
+        int monsterCenterY = y + h / 2;
+
+        int dx = kirbyCenterX - monsterCenterX;
+        int dy = kirbyCenterY - monsterCenterY;
+
+        if (dx < 0) dx = -dx;
+        if (dy < 0) dy = -dy;
+
+        return dx <= 260 && dy <= 90;
+    }
+
+    void TryRangedAttack()
+    {
+        if (monsterType != 1)
+            return;
+
+        if (rangedAttackCooldown > 0)
+            rangedAttackCooldown--;
+
+        if (rangedAttackFrameTick > 0)
+            rangedAttackFrameTick--;
+
+        if (rangedAttackCooldown > 0)
+            return;
+
+        if (!IsKirbyInRangedAttackRange())
+            return;
+
+        int kirbyCenterX = kirbyX + kirbyW / 2;
+        int monsterCenterX = x + w / 2;
+
+        if (kirbyCenterX < monsterCenterX)
+            dir = -1;
+        else
+            dir = 1;
+
+        int bulletX = (dir == -1) ? x - 30 : x + w;
+        int bulletY = y + h / 2 - 12;
+
+        SpawnEnemyFireBall(bulletX, bulletY, dir);
+
+        rangedAttackFrameTick = 18;
+        rangedAttackCooldown = 90;
+    }
+
+
+    bool IsKirbyBelowForBombDrop()
+    {
+        if (monsterType != 2)
+            return false;
+
+        int kirbyCenterX = kirbyX + kirbyW / 2;
+        int monsterCenterX = x + w / 2;
+        int dx = kirbyCenterX - monsterCenterX;
+        if (dx < 0) dx = -dx;
+
+        return dx <= 70 && kirbyY > y;
+    }
+
+    void TryBombDropAttack()
+    {
+        if (monsterType != 2)
+            return;
+
+        if (bombDropCooldown > 0)
+            bombDropCooldown--;
+
+        if (bombDropCooldown > 0)
+            return;
+
+        if (!IsKirbyBelowForBombDrop())
+            return;
+
+        SpawnBombObject(x + w / 2 - 17, y + h, 0.0f, 1.0f, true);
+        bombDropCooldown = 100;
+    }
+
+    bool HasSafeGroundBelowX(int testX)
+    {
+        int blockCount = 0;
+        SolidBlock* blocks = GetCurrentSolidBlocks(&blockCount);
+
+        for (int i = 0; i < blockCount; i++)
+        {
+            RECT block = blocks[i].rc;
+
+            if (testX >= block.left + 6 && testX <= block.right - 6 && block.top >= y)
+                return true;
+        }
+
+        return false;
+    }
+
+    bool HasGroundAhead(int nextX)
+    {
+        int footX;
+
+        if (dir < 0)
+            footX = nextX + MONSTER_HIT_LEFT - 6;
+        else
+            footX = nextX + w - MONSTER_HIT_RIGHT + 6;
+
+        int footY = y + h - MONSTER_HIT_BOTTOM;
+
+        RECT probe;
+        probe.left = footX - 3;
+        probe.right = footX + 3;
+        probe.top = footY + 2;
+        probe.bottom = footY + 34;
+
+        return HitSolidBlock(probe, NULL);
+    }
+
+    void UpdateFlyingBombMonster()
+    {
+        TryBombDropAttack();
+
+        int nextX = x + speed * dir;
+
+        // 3스테이지 폭탄 몬스터도 구멍 위로 계속 넘어가지 않게,
+        // 아래에 발판/땅이 없는 쪽으로 가려 하면 방향을 바꿈.
+        if (g_currentStage == 3 && !HasSafeGroundBelowX(nextX + w / 2))
+        {
+            dir *= -1;
+            nextX = x + speed * dir;
+        }
+
+        x = nextX;
+
+        if (x < leftLimit)
+        {
+            x = leftLimit;
+            dir = 1;
+        }
+
+        if (x > rightLimit)
+        {
+            x = rightLimit;
+            dir = -1;
+        }
+    }
+
+    void ApplyGravity()
+    {
+        if (!active)
+            return;
+
+        vy += gravity;
+
+        if (vy > maxFallSpeed)
+            vy = maxFallSpeed;
+
+        int nextY = y + (int)vy;
+        RECT nextHitY = GetMonsterHitBox(x, nextY, w, h);
+
+        RECT hitBlock;
+        onGround = false;
+
+        if (!HitSolidBlock(nextHitY, &hitBlock))
+        {
+            y = nextY;
+        }
+        else
+        {
+            if (vy > 0)
+            {
+                y = hitBlock.top - (h - MONSTER_HIT_BOTTOM);
+                vy = 0;
+                onGround = true;
+
+                if (isJumpAttack)
+                {
+                    isJumpAttack = false;
+                    jumpAttackFrameIndex = 0;
+                    jumpAttackCooldown = 45;
+                }
+            }
+            else if (vy < 0)
+            {
+                y = hitBlock.bottom - MONSTER_HIT_TOP;
+                vy = 0;
+            }
+        }
+
+        RECT currentHit = GetMonsterHitBox(x, y, w, h);
+        int groundY;
+
+        if (vy >= 0 && FindGroundUnderHitBox(currentHit, &groundY))
+        {
+            y = groundY - (h - MONSTER_HIT_BOTTOM);
+            vy = 0;
+            onGround = true;
+
+            if (isJumpAttack)
+            {
+                isJumpAttack = false;
+                jumpAttackFrameIndex = 0;
+                jumpAttackCooldown = 45;
+            }
+        }
+
+        // 몬스터가 구멍 아래로 떨어지면 완전히 제거
+        if (y > WORLD_H + 80)
+        {
+            active = false;
+            isDeadEffect = false;
+            isAttack = false;
+            isJumpAttack = false;
+            vy = 0.0f;
+            return;
+        }
+    }
+
+    bool IsKirbyNearForJumpAttack()
+    {
+        int kirbyCenterX = kirbyX + kirbyW / 2;
+        int kirbyCenterY = kirbyY + kirbyH / 2;
+
+        int monsterCenterX = x + w / 2;
+        int monsterCenterY = y + h / 2;
+
+        int dx = kirbyCenterX - monsterCenterX;
+        int dy = kirbyCenterY - monsterCenterY;
+
+        if (dx < 0)
+            dx = -dx;
+
+        if (dy < 0)
+            dy = -dy;
+
+        if (dx <= attackRange && dy <= 80)
+            return true;
+
+        return false;
+    }
+
+    void StartJumpAttack()
+    {
+        int kirbyCenterX = kirbyX + kirbyW / 2;
+        int monsterCenterX = x + w / 2;
+
+        if (kirbyCenterX < monsterCenterX)
+        {
+            dir = -1;
+            jumpAttackVX = -4.0f;
+        }
+        else
+        {
+            dir = 1;
+            jumpAttackVX = 4.0f;
+        }
+
+        isJumpAttack = true;
+        isAttack = true;
+        jumpAttackFrameIndex = 0;
+
+        vy = -8.0f;
+        onGround = false;
+    }
+
+    void UpdateJumpAttack()
+    {
+        if (!isJumpAttack)
+            return;
+
+        int nextX = x + (int)jumpAttackVX;
+        RECT nextHitX = GetMonsterHitBox(nextX, y, w, h);
+        RECT hitBlock;
+
+        if (!HitSolidBlock(nextHitX, &hitBlock))
+        {
+            x = nextX;
+        }
+        else
+        {
+            if (jumpAttackVX < 0)
+            {
+                x = hitBlock.right - MONSTER_HIT_LEFT;
+            }
+            else
+            {
+                x = hitBlock.left - (w - MONSTER_HIT_RIGHT);
+            }
+
+            jumpAttackVX = 0.0f;
+        }
+
+        if (x < leftLimit)
+        {
+            x = leftLimit;
+            jumpAttackVX = 0.0f;
+        }
+
+        if (x > rightLimit)
+        {
+            x = rightLimit;
+            jumpAttackVX = 0.0f;
+        }
+
+        if (vy < 0)
+        {
+            jumpAttackFrameIndex = 0;
+        }
+        else
+        {
+            jumpAttackFrameIndex = 1;
+        }
+
+        ApplyGravity();
+    }
+
+    bool IsInAbsorbRange()
+    {
+        if (!active)
+            return false;
+
+        int kirbyCenterX = kirbyX + kirbyW / 2;
+        int monsterCenterX = x + w / 2;
+
+        int kirbyTop = kirbyY;
+        int kirbyBottom = kirbyY + kirbyH;
+
+        int monsterTop = y;
+        int monsterBottom = y + h;
+
+        bool overlapY = monsterBottom > kirbyTop && monsterTop < kirbyBottom;
+
+        if (!overlapY)
+            return false;
+
+        if (kirbyFaceLeft)
+        {
+            int distance = kirbyX - (x + w);
+
+            if (monsterCenterX <= kirbyCenterX && distance <= ABSORB_RANGE_X)
+                return true;
+        }
+        else
+        {
+            int distance = x - (kirbyX + kirbyW);
+
+            if (monsterCenterX >= kirbyCenterX && distance <= ABSORB_RANGE_X)
+                return true;
+        }
+
+        return false;
+    }
+
+    bool IsReachedKirby()
+    {
+        if (!active)
+            return false;
+
+        int kirbyCenterX = kirbyX + kirbyW / 2;
+        int kirbyCenterY = kirbyY + kirbyH / 2;
+
+        int monsterCenterX = x + w / 2;
+        int monsterCenterY = y + h / 2;
+
+        int dx = monsterCenterX - kirbyCenterX;
+        int dy = monsterCenterY - kirbyCenterY;
+
+        if (dx < 0)
+            dx = -dx;
+
+        if (dy < 0)
+            dy = -dy;
+
+        const int EAT_DISTANCE_X = 10;
+        const int EAT_DISTANCE_Y = 18;
+
+        if (dx <= EAT_DISTANCE_X && dy <= EAT_DISTANCE_Y)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    void ApplyAbsorb()
+    {
+        if (!active)
+            return;
+
+        if (!isAbsorb)
+            return;
+
+        if (!IsInAbsorbRange())
+            return;
+
+        if (kirbyFaceLeft)
+        {
+            x += ABSORB_PULL_SPEED;
+        }
+        else
+        {
+            x -= ABSORB_PULL_SPEED;
+        }
+
+        if (IsReachedKirby())
+        {
+            active = false;
+            isAttack = false;
+            vy = 0.0f;
+
+            // 몬스터를 먹으면 몬스터 속성 번호를 저장하고 커비가 커진 상태로 변경
+            absorbedMonsterType = monsterType;
+            isFireKirby = false;
+            isFireTransform = false;
+            isBombKirby = false;
+            isBombTransform = false;
+            kirbyAbilityType = 0;
+            isPowerKirby = true;
+            SetKirbyPowerSizeKeepBottom();
+
+            // 커진 상태에서는 풍선 상태를 못 하게 즉시 해제
+            isSpace = false;
+            isSpaceRelease = false;
+            spaceFrameIndex = 0;
+            spaceStartFrameDone = false;
+            moveUp = false;
+            moveDown = false;
+
+            // 먹은 뒤 1초 동안은 K를 눌러도 발사 안 됨
+            powerWaitTick = 0;
+            canPowerShoot = false;
+
+            // 한 번 먹으면 한 번만 발사 가능
+            powerShotUsed = false;
+
+            isPowerAttack = false;
+            powerAttackTick = 0;
+
+            isAbsorb = false;
+            absorbFrameIndex = 0;
+            absorbFrontEffectIndex = 0;
+            absorbFrontEffectTick = 0;
+        }
+    }
+
+    void Update()
+    {
+        if (!active)
+        {
+            UpdateDeadEffect();
+            return;
+        }
+
+        if (jumpAttackCooldown > 0)
+            jumpAttackCooldown--;
+
+        if (monsterType == 1)
+        {
+            TryRangedAttack();
+        }
+
+        if (monsterType == 2)
+        {
+            // 빨아들이기 중이어도 모든 몬스터가 멈추면 안 됨.
+            // 커비 흡수 범위 안에 들어온 폭탄 몬스터만 빨려가고,
+            // 범위 밖의 폭탄 몬스터는 평소처럼 하늘에서 움직이게 함.
+            if (isAbsorb && IsInAbsorbRange())
+            {
+                ApplyAbsorb();
+            }
+            else
+            {
+                UpdateFlyingBombMonster();
+            }
+            return;
+        }
+
+        if (isAbsorb && IsInAbsorbRange())
+        {
+            // 빨아들이기 범위 안에 있는 몬스터만 흡수 처리.
+            // 범위 밖 몬스터는 아래 일반 이동 코드로 계속 움직임.
+            isJumpAttack = false;
+            ApplyAbsorb();
+            ApplyGravity();
+            return;
+        }
+
+        if (isJumpAttack)
+        {
+            UpdateJumpAttack();
+            return;
+        }
+
+        if (monsterType != 1 && onGround && jumpAttackCooldown <= 0 && IsKirbyNearForJumpAttack())
+        {
+            StartJumpAttack();
+            return;
+        }
+
+        int nextX = x + speed * dir;
+
+        // 땅 몬스터는 발판 끝이나 구멍 쪽으로 계속 걸어가지 않고 되돌아감
+        if (onGround && !HasGroundAhead(nextX))
+        {
+            dir *= -1;
+            nextX = x + speed * dir;
+        }
+
+        RECT nextHitX = GetMonsterHitBox(nextX, y, w, h);
+        RECT hitBlock;
+
+        if (!HitSolidBlock(nextHitX, &hitBlock))
+        {
+            x = nextX;
+        }
+        else
+        {
+            if (dir < 0)
+            {
+                x = hitBlock.right - MONSTER_HIT_LEFT;
+                dir = 1;
+            }
+            else
+            {
+                x = hitBlock.left - (w - MONSTER_HIT_RIGHT);
+                dir = -1;
+            }
+        }
+
+        if (x < leftLimit)
+        {
+            x = leftLimit;
+            dir = 1;
+        }
+
+        if (x > rightLimit)
+        {
+            x = rightLimit;
+            dir = -1;
+        }
+
+        ApplyGravity();
+    }
+
+    void NextFrame()
+    {
+        if (!active)
+            return;
+
+        if (isJumpAttack)
+        {
+            if (vy < 0)
+                jumpAttackFrameIndex = 0;
+            else
+                jumpAttackFrameIndex = 1;
+
+            return;
+        }
+
+        frameIndex++;
+
+        if (frameIndex >= frameCount)
+        {
+            frameIndex = 0;
+        }
+    }
+
+    void Draw(Graphics& graphics);
+};
+
+const int MONSTER_COUNT = 5; // 2스테이지에서는 폭탄병까지 사용
+Monster g_monsters[MONSTER_COUNT];
+
+void InitMonsters()
+{
+    for (int i = 0; i < MONSTER_COUNT; i++)
+    {
+        g_monsters[i].active = false;
+        g_monsters[i].isDeadEffect = false;
+    }
+
+    if (g_currentStage == 1)
+    {
+        // 1스테이지: 기존 구성 유지, 폭탄병은 생성하지 않음
+        g_monsters[0].Init(666, 470, 606, 1015, -1);
+        g_monsters[1].Init(1200, 470, 1034, 1611, -1);
+        g_monsters[2].Init(1488, 379, 1378, 1666, 1);
+        // 불속성 몬스터는 문 앞쪽 빨간 원으로 표시한 구간만 돌아다니게 제한
+        g_monsters[3].Init(1805, 100, 1720, 1860, -1, 1);
+        g_monsters[4].active = false;
+        return;
+    }
+
+    if (g_currentStage == 2)
+    {
+        // 2스테이지: 일반몹 2마리, 불몹 2마리, 폭탄몹 1마리
+        g_monsters[0].Init(95, 320, 10, 230, 1, 0);
+        g_monsters[1].Init(455, 235, 330, 580, -1, 0);
+        g_monsters[2].Init(1450, 285, 1425, 1685, -1, 1);
+        g_monsters[3].Init(1815, 360, 1685, 1885, 1, 1);
+        g_monsters[4].Init(1780, 145, 1690, 1880, 1, 2);
+        return;
+    }
+
+    if (g_currentStage == 3)
+    {
+        // 3스테이지: 날아다니는 폭탄 몬스터 3마리
+        g_monsters[0].Init(300, 255, 255, 640, 1, 2);
+        g_monsters[1].Init(820, 150, 790, 945, -1, 2);
+        g_monsters[2].Init(1320, 250, 1185, 1495, 1, 2);
+        g_monsters[3].Init(1770, 150, 1635, 1900, -1, 2);
+        g_monsters[3].active = false; // 요청대로 실제 배치는 3마리만 사용
+        g_monsters[4].active = false;
+        return;
+    }
+
+    if (g_currentStage == 4)
+    {
+        // 4스테이지 보스전: 일반 몬스터는 쓰지 않고 보스만 초기화
+        InitBossObjects();
+        return;
+    }
+}
 
 void StartBombKirbyTransform();
 void StartBombAttack();
@@ -1080,13 +3123,1034 @@ void SpawnBombExplosion(int x, int y);
 void CheckBombExplosionHitKirby(RECT explosionRc);
 void CheckBombHitMonsters(RECT bombRc, bool fromEnemy);
 
+void DigestPowerKirby()
+{
+    if (!isPowerKirby)
+        return;
+
+    // 커진 상태에서 L을 누르면 36번 소화 프레임을 보여줌
+    // 먹은 몬스터가 불 속성 1번이면 36번 뒤에 39번을 보여주고 40번 불 커비가 됨
+    digestResultType = absorbedMonsterType;
+
+    isPowerKirby = false;
+    canPowerShoot = false;
+    powerWaitTick = 0;
+    powerShotUsed = false;
+
+    isPowerAttack = false;
+    powerAttackTick = 0;
+
+    isPowerDigest = true;
+    powerDigestTick = 0;
+
+    isAbsorb = false;
+    isSpace = false;
+    isSpaceRelease = false;
+    isCrouch = false;
+
+    absorbFrameIndex = 0;
+    absorbFrontEffectIndex = 0;
+    absorbFrontEffectTick = 0;
+
+    spaceFrameIndex = 0;
+    spaceStartFrameDone = false;
+
+    StopMove();
+    SetKirbyNormalSizeKeepBottom();
+}
+
+void StartPowerProjectile()
+{
+    if (!isPowerKirby)
+        return;
+
+    // 몬스터를 먹고 1초가 지나기 전에는 K를 눌러도 아무 일도 안 일어남
+    if (!canPowerShoot)
+        return;
+
+    // 한 번 먹었을 때 발사는 딱 한 번만 가능
+    if (powerShotUsed)
+        return;
+
+    // 이미 날아가는 34번 프레임이 있으면 새로 만들지 않음
+    if (isPowerProjectileActive)
+        return;
+
+    powerShotUsed = true;
+
+    isPowerAttack = true;
+    powerAttackTick = 0;
+
+    powerProjectileDir = kirbyFaceLeft ? -1 : 1;
+
+    powerProjectileW = 40;
+    powerProjectileH = 32;
+
+    if (kirbyFaceLeft)
+    {
+        powerProjectileX = kirbyX - powerProjectileW + 4;
+    }
+    else
+    {
+        powerProjectileX = kirbyX + kirbyW - 4;
+    }
+
+    powerProjectilePrevX = powerProjectileX;
+    powerProjectileY = kirbyY + kirbyH / 2 - powerProjectileH / 2;
+    isPowerProjectileActive = true;
+
+    // 한 번 발사하면 바로 일반 커비 상태와 일반 크기로 복귀
+    isPowerKirby = false;
+    canPowerShoot = false;
+    powerWaitTick = 0;
+
+    SetKirbyNormalSizeKeepBottom();
+}
+
+void UpdatePowerAttack()
+{
+    if (isPowerAttack)
+    {
+        powerAttackTick++;
+
+        if (powerAttackTick >= POWER_ATTACK_DURATION)
+        {
+            powerAttackTick = 0;
+            isPowerAttack = false;
+        }
+    }
+}
+
+void ClearCurrentAbilityState()
+{
+    kirbyAbilityType = 0;
+
+    isFireKirby = false;
+    isFireTransform = false;
+    isFireAttackPose = false;
+    isFireBreath = false;
+    isFireBallActive = false;
+    fireBalloonFrameIndex = 0;
+    fireBalloonStartFrameDone = false;
+
+    isBombKirby = false;
+    isBombTransform = false;
+    isBombAttack = false;
+    bombAttackFrameIndex = 0;
+    bombAttackTick = 0;
+    bombAttackBombSpawned = false;
+    bombBalloonFrameIndex = 0;
+    bombBalloonStartFrameDone = false;
+
+    isPowerKirby = false;
+    isPowerAttack = false;
+    isPowerProjectileActive = false;
+
+    isSpace = false;
+    isSpaceRelease = false;
+    isCrouch = false;
+    StopMove();
+
+    SetKirbyNormalSizeKeepBottom();
+}
+
+void RestoreAbilityFromStar()
+{
+    int restoreType = abilityStarType;
+
+    isAbilityStarActive = false;
+    abilityStarType = 0;
+    abilityStarVX = 0.0f;
+    abilityStarVY = 0.0f;
+
+    // 능력별을 다시 빨아들이면 바로 속성으로 돌아가지 않고,
+    // 몬스터를 먹었을 때처럼 커진 커비 상태로 보관한다.
+    // 여기서 K를 누르면 34번 별을 다시 발사하고, L을 누르면 이전 속성으로 변신한다.
+    ClearCurrentAbilityState();
+
+    absorbedMonsterType = restoreType;
+    digestResultType = 0;
+
+    isPowerKirby = true;
+    SetKirbyPowerSizeKeepBottom();
+
+    // 능력별은 이미 커비 안에 들어온 상태이므로 바로 K/L 선택이 가능하게 둔다.
+    powerWaitTick = POWER_WAIT_TICK_MAX;
+    canPowerShoot = true;
+    powerShotUsed = false;
+
+    isPowerAttack = false;
+    powerAttackTick = 0;
+
+    isAbsorb = false;
+    absorbFrameIndex = 0;
+    absorbFrontEffectIndex = 0;
+    absorbFrontEffectTick = 0;
+
+    isSpace = false;
+    isSpaceRelease = false;
+    isCrouch = false;
+    spaceFrameIndex = 0;
+    spaceStartFrameDone = false;
+    fireBalloonFrameIndex = 0;
+    fireBalloonStartFrameDone = false;
+    bombBalloonFrameIndex = 0;
+    bombBalloonStartFrameDone = false;
+
+    moveUp = false;
+    moveDown = false;
+}
+
+void EjectAbilityStar()
+{
+    if (isAbilityStarActive)
+        return;
+
+    int currentType = 0;
+
+    if (isFireKirby)
+        currentType = 1;
+    else if (isBombKirby)
+        currentType = 2;
+    else
+        return;
+
+    abilityStarType = currentType;
+    abilityStarW = 51;
+    abilityStarH = 48;
+
+    if (kirbyFaceLeft)
+    {
+        abilityStarX = (float)(kirbyX + kirbyW + 4);
+        abilityStarVX = 5.0f;
+    }
+    else
+    {
+        abilityStarX = (float)(kirbyX - abilityStarW - 4);
+        abilityStarVX = -5.0f;
+    }
+
+    abilityStarY = (float)(kirbyY + kirbyH / 2 - abilityStarH / 2);
+    abilityStarVY = -5.5f;
+    isAbilityStarActive = true;
+    abilityStarLifeTick = 0;
+
+    ClearCurrentAbilityState();
+}
+
+RECT GetAbilityStarRect()
+{
+    RECT rc;
+
+    rc.left = (int)abilityStarX;
+    rc.top = (int)abilityStarY;
+    rc.right = (int)abilityStarX + abilityStarW;
+    rc.bottom = (int)abilityStarY + abilityStarH;
+
+    return rc;
+}
+
+bool IsAbilityStarInAbsorbRange()
+{
+    if (!isAbilityStarActive)
+        return false;
+
+    RECT starRc = GetAbilityStarRect();
+
+    int kirbyCenterX = kirbyX + kirbyW / 2;
+    int starCenterX = (starRc.left + starRc.right) / 2;
+
+    bool overlapY = starRc.bottom > kirbyY && starRc.top < kirbyY + kirbyH;
+
+    if (!overlapY)
+        return false;
+
+    if (kirbyFaceLeft)
+    {
+        int distance = kirbyX - starRc.right;
+
+        if (starCenterX <= kirbyCenterX && distance <= ABSORB_RANGE_X + 20)
+            return true;
+    }
+    else
+    {
+        int distance = starRc.left - (kirbyX + kirbyW);
+
+        if (starCenterX >= kirbyCenterX && distance <= ABSORB_RANGE_X + 20)
+            return true;
+    }
+
+    return false;
+}
+
+bool IsAbilityStarReachedKirby()
+{
+    RECT starRc = GetAbilityStarRect();
+
+    int kirbyCenterX = kirbyX + kirbyW / 2;
+    int kirbyCenterY = kirbyY + kirbyH / 2;
+    int starCenterX = (starRc.left + starRc.right) / 2;
+    int starCenterY = (starRc.top + starRc.bottom) / 2;
+
+    int dx = starCenterX - kirbyCenterX;
+    int dy = starCenterY - kirbyCenterY;
+
+    if (dx < 0) dx = -dx;
+    if (dy < 0) dy = -dy;
+
+    return dx <= 14 && dy <= 22;
+}
+
+void UpdateAbilityStar()
+{
+    if (!isAbilityStarActive)
+        return;
+
+    abilityStarLifeTick++;
+
+    if (abilityStarLifeTick >= ABILITY_STAR_LIFE_MAX)
+    {
+        isAbilityStarActive = false;
+        abilityStarType = 0;
+        abilityStarLifeTick = 0;
+        abilityStarVX = 0.0f;
+        abilityStarVY = 0.0f;
+        return;
+    }
+
+    if (isAbsorb && IsAbilityStarInAbsorbRange())
+    {
+        if (kirbyFaceLeft)
+            abilityStarX += ABILITY_STAR_ABSORB_SPEED;
+        else
+            abilityStarX -= ABILITY_STAR_ABSORB_SPEED;
+
+        int kirbyCenterY = kirbyY + kirbyH / 2;
+        int starCenterY = (int)abilityStarY + abilityStarH / 2;
+
+        if (starCenterY < kirbyCenterY)
+            abilityStarY += 2.0f;
+        else if (starCenterY > kirbyCenterY)
+            abilityStarY -= 2.0f;
+
+        abilityStarVX = 0.0f;
+        abilityStarVY = 0.0f;
+
+        if (IsAbilityStarReachedKirby())
+        {
+            RestoreAbilityFromStar();
+        }
+
+        return;
+    }
+
+    abilityStarX += abilityStarVX;
+    abilityStarY += abilityStarVY;
+    abilityStarVY += ABILITY_STAR_GRAVITY;
+
+    RECT starRc = GetAbilityStarRect();
+    RECT hitBlock;
+
+    if (HitSolidBlock(starRc, &hitBlock) && abilityStarVY >= 0.0f)
+    {
+        abilityStarY = (float)(hitBlock.top - abilityStarH);
+        abilityStarVY = -abilityStarVY * ABILITY_STAR_BOUNCE;
+
+        if (abilityStarVY > -3.0f)
+            abilityStarVY = -3.0f;
+    }
+
+    if (abilityStarY + abilityStarH >= WORLD_H)
+    {
+        abilityStarY = (float)(WORLD_H - abilityStarH);
+        abilityStarVY = -abilityStarVY * ABILITY_STAR_BOUNCE;
+
+        if (abilityStarVY > -3.0f)
+            abilityStarVY = -3.0f;
+    }
+
+    if (abilityStarX < 0)
+    {
+        abilityStarX = 0;
+        abilityStarVX = -abilityStarVX;
+    }
+
+    int currentWorldW = GetCurrentWorldW();
+
+    if (abilityStarX + abilityStarW > currentWorldW)
+    {
+        abilityStarX = (float)(currentWorldW - abilityStarW);
+        abilityStarVX = -abilityStarVX;
+    }
+}
+
+void DrawAbilityStar(Graphics& graphics)
+{
+    if (!isAbilityStarActive)
+        return;
+
+    if (g_powerProjectileFrame == NULL)
+        return;
+
+    DrawWorldImage(
+        graphics,
+        g_powerProjectileFrame,
+        (int)abilityStarX,
+        (int)abilityStarY,
+        abilityStarW,
+        abilityStarH
+    );
+}
+
+void StartFireKirbyTransform()
+{
+    kirbyAbilityType = 1;
+    isBombKirby = false;
+    isBombTransform = false;
+    bombTransformTick = 0;
+    isFireKirby = false;
+    isFireTransform = true;
+    fireTransformTick = 0;
+
+    isFireAttackPose = false;
+    fireAttackPoseTick = 0;
+    fireBalloonFrameIndex = 0;
+    fireBalloonStartFrameDone = false;
+
+    isPowerKirby = false;
+    isPowerAttack = false;
+    isPowerProjectileActive = false;
+    isAbsorb = false;
+    isSpace = false;
+    isSpaceRelease = false;
+    isCrouch = false;
+
+    absorbedMonsterType = 0;
+    digestResultType = 0;
+
+    SetKirbyNormalSizeKeepBottom();
+}
+
+void UpdatePowerDigest()
+{
+    if (!isPowerDigest)
+        return;
+
+    powerDigestTick++;
+
+    if (powerDigestTick >= POWER_DIGEST_DURATION)
+    {
+        powerDigestTick = 0;
+        isPowerDigest = false;
+
+        if (digestResultType == 1)
+        {
+            StartFireKirbyTransform();
+        }
+        else if (digestResultType == 2)
+        {
+            StartBombKirbyTransform();
+        }
+        else
+        {
+            kirbyAbilityType = 0;
+            isFireKirby = false;
+            isFireTransform = false;
+            isBombKirby = false;
+            isBombTransform = false;
+            absorbedMonsterType = 0;
+            digestResultType = 0;
+            SetKirbyNormalSizeKeepBottom();
+        }
+    }
+}
+
+
+void StartBombKirbyTransform()
+{
+    kirbyAbilityType = 2;
+
+    // 폭탄 속성 몬스터를 소화한 뒤에는 바로 54번으로 가지 않고,
+    // 먼저 68번 변신 프레임을 잠깐 보여준 뒤 폭탄 커비 상태가 됨
+    isBombKirby = false;
+    isBombTransform = true;
+    bombTransformTick = 0;
+
+    isFireKirby = false;
+    isFireTransform = false;
+    isFireAttackPose = false;
+    isFireBreath = false;
+    isFireBallActive = false;
+
+    isPowerKirby = false;
+    isPowerAttack = false;
+    isPowerProjectileActive = false;
+    isAbsorb = false;
+    isSpace = false;
+    isSpaceRelease = false;
+    isCrouch = false;
+
+    bombWalkFrameIndex = 0;
+    bombBalloonFrameIndex = 0;
+    bombBalloonStartFrameDone = false;
+    isBombAttack = false;
+    bombAttackFrameIndex = 0;
+    bombAttackTick = 0;
+    bombAttackBombSpawned = false;
+
+    absorbedMonsterType = 0;
+    digestResultType = 0;
+
+    SetKirbyNormalSizeKeepBottom();
+}
+
+void SpawnBombExplosion(int x, int y)
+{
+    for (int i = 0; i < BOMB_EXPLOSION_MAX; i++)
+    {
+        if (!g_bombExplosions[i].active)
+        {
+            g_bombExplosions[i].active = true;
+            g_bombExplosions[i].w = 56;
+            g_bombExplosions[i].h = 40;
+            g_bombExplosions[i].x = x - g_bombExplosions[i].w / 2;
+            g_bombExplosions[i].y = y - g_bombExplosions[i].h + 6;
+            g_bombExplosions[i].tick = 0;
+
+            RECT explosionRc;
+            explosionRc.left = g_bombExplosions[i].x;
+            explosionRc.top = g_bombExplosions[i].y;
+            explosionRc.right = g_bombExplosions[i].x + g_bombExplosions[i].w;
+            explosionRc.bottom = g_bombExplosions[i].y + g_bombExplosions[i].h;
+
+            CheckBombExplosionHitKirby(explosionRc);
+            CheckBombHitMonsters(explosionRc, false);
+            return;
+        }
+    }
+}
+
+void SpawnBombObjectEx(int x, int y, int w, int h, float vx, float vy, bool fromEnemy, int damage, bool bounce)
+{
+    for (int i = 0; i < BOMB_OBJECT_MAX; i++)
+    {
+        if (!g_bombs[i].active)
+        {
+            g_bombs[i].active = true;
+            g_bombs[i].fromEnemy = fromEnemy;
+            g_bombs[i].x = x;
+            g_bombs[i].y = y;
+            g_bombs[i].w = w;
+            g_bombs[i].h = h;
+            g_bombs[i].damage = damage;
+            g_bombs[i].bounce = bounce;
+            g_bombs[i].vx = vx;
+            g_bombs[i].vy = vy;
+            return;
+        }
+    }
+}
+
+void SpawnBombObject(int x, int y, float vx, float vy, bool fromEnemy)
+{
+    SpawnBombObjectEx(x, y, 34, 34, vx, vy, fromEnemy, 28, false);
+}
+
+void StartBombAttack()
+{
+    if (!isBombKirby)
+        return;
+
+    if (isBombAttack)
+        return;
+
+    if (g_bombKCooldownTick > 0)
+        return;
+
+    g_bombKCooldownTick = BOMB_K_COOLDOWN_MAX;
+    g_bombSpecialAttackMode = false;
+    isBombAttack = true;
+    bombAttackFrameIndex = 0;
+    bombAttackTick = 0;
+    bombAttackBombSpawned = false;
+
+    isSpace = false;
+    isSpaceRelease = false;
+    isCrouch = false;
+    StopMove();
+}
+
+void StartBombSpecialAttack()
+{
+    if (!isBombKirby)
+        return;
+
+    if (isBombAttack)
+        return;
+
+    if (g_bombICooldownTick > 0)
+        return;
+
+    g_bombICooldownTick = BOMB_I_COOLDOWN_MAX;
+    g_bombSpecialAttackMode = true;
+    isBombAttack = true;
+    bombAttackFrameIndex = 0;
+    bombAttackTick = 0;
+    bombAttackBombSpawned = false;
+
+    isSpace = false;
+    isSpaceRelease = false;
+    isCrouch = false;
+    StopMove();
+}
+
+void UpdateBombAttack()
+{
+    if (!isBombAttack)
+        return;
+
+    bombAttackTick++;
+
+    if (bombAttackFrameIndex == 1 && !bombAttackBombSpawned)
+    {
+        int dir = kirbyFaceLeft ? -1 : 1;
+
+        if (g_bombSpecialAttackMode)
+        {
+            // I 필살기: K 폭탄 프레임을 3배 크기로 던지고 바닥을 계속 튕기며 이동
+            int bigW = 102;
+            int bigH = 102;
+            int bombX = kirbyFaceLeft ? kirbyX - bigW + 8 : kirbyX + kirbyW - 8;
+            int bombY = kirbyY + kirbyH / 2 - bigH / 2;
+
+            SpawnBombObjectEx(bombX, bombY, bigW, bigH, 10.5f * dir, -9.5f, false, 84, true);
+        }
+        else
+        {
+            // K 일반 공격: 폭탄 하나만 빠르게 던짐
+            int bombX = kirbyFaceLeft ? kirbyX - 28 : kirbyX + kirbyW - 6;
+            int bombY = kirbyY + kirbyH / 2 - 22;
+
+            SpawnBombObjectEx(bombX, bombY, 34, 34, 8.5f * dir, -8.5f, false, 28, false);
+        }
+
+        bombAttackBombSpawned = true;
+    }
+
+    if (bombAttackTick >= BOMB_ATTACK_FRAME_DURATION)
+    {
+        bombAttackTick = 0;
+        bombAttackFrameIndex++;
+
+        if (bombAttackFrameIndex >= 3)
+        {
+            isBombAttack = false;
+            bombAttackFrameIndex = 0;
+            bombAttackBombSpawned = false;
+            g_bombSpecialAttackMode = false;
+        }
+    }
+}
+
+void CheckBombHitMonsters(RECT bombRc, bool fromEnemy)
+{
+    if (fromEnemy)
+        return;
+
+    for (int i = 0; i < MONSTER_COUNT; i++)
+    {
+        if (!g_monsters[i].active)
+            continue;
+
+        RECT monsterRc;
+        monsterRc.left = g_monsters[i].x;
+        monsterRc.top = g_monsters[i].y;
+        monsterRc.right = g_monsters[i].x + g_monsters[i].w;
+        monsterRc.bottom = g_monsters[i].y + g_monsters[i].h;
+
+        if (IsRectHit(bombRc, monsterRc))
+        {
+            g_monsters[i].StartDeadEffect();
+        }
+    }
+}
+
+void CheckBombExplosionHitKirby(RECT explosionRc)
+{
+    // 빨아들이기 중이어도 폭발에는 맞게 함
+    if (isKirbyHit || kirbyHitCooldownTick > 0)
+        return;
+
+    RECT kirbyRc = GetKirbyBodyRect();
+
+    if (IsRectHit(kirbyRc, explosionRc))
+    {
+        StartKirbyHitEffect();
+    }
+}
+
+void UpdateBombObjects()
+{
+    for (int i = 0; i < BOMB_OBJECT_MAX; i++)
+    {
+        if (!g_bombs[i].active)
+            continue;
+
+        g_bombs[i].x += (int)g_bombs[i].vx;
+        g_bombs[i].y += (int)g_bombs[i].vy;
+        g_bombs[i].vy += 0.45f;
+
+        RECT bombRc;
+        bombRc.left = g_bombs[i].x;
+        bombRc.top = g_bombs[i].y;
+        bombRc.right = g_bombs[i].x + g_bombs[i].w;
+        bombRc.bottom = g_bombs[i].y + g_bombs[i].h;
+
+        CheckBombHitMonsters(bombRc, g_bombs[i].fromEnemy);
+
+        RECT hitBlock;
+        bool hitGround = false;
+
+        if (HitSolidBlock(bombRc, &hitBlock) && g_bombs[i].vy >= 0)
+        {
+            hitGround = true;
+            g_bombs[i].y = hitBlock.top - g_bombs[i].h;
+        }
+
+        if (g_bombs[i].y + g_bombs[i].h >= WORLD_H)
+        {
+            hitGround = true;
+            g_bombs[i].y = WORLD_H - g_bombs[i].h;
+        }
+
+        if (hitGround)
+        {
+            if (g_bombs[i].bounce)
+            {
+                // I 필살기 폭탄은 바닥에서 계속 튕기면서 앞으로 굴러가듯 이동
+                g_bombs[i].vy = -8.5f;
+                continue;
+            }
+
+            SpawnBombExplosion(g_bombs[i].x + g_bombs[i].w / 2, g_bombs[i].y + g_bombs[i].h);
+            g_bombs[i].active = false;
+            continue;
+        }
+
+        if (g_bombs[i].x + g_bombs[i].w < 0 || g_bombs[i].x > GetCurrentWorldW() || g_bombs[i].y > WORLD_H + 100)
+        {
+            g_bombs[i].active = false;
+        }
+    }
+
+    for (int i = 0; i < BOMB_EXPLOSION_MAX; i++)
+    {
+        if (!g_bombExplosions[i].active)
+            continue;
+
+        g_bombExplosions[i].tick++;
+
+        if (g_bombExplosions[i].tick >= BOMB_EXPLOSION_DURATION)
+        {
+            g_bombExplosions[i].active = false;
+            g_bombExplosions[i].tick = 0;
+        }
+    }
+}
+
+void DrawBombObjects(Graphics& graphics)
+{
+    if (g_bombProjectileFrame == NULL)
+        return;
+
+    for (int i = 0; i < BOMB_OBJECT_MAX; i++)
+    {
+        if (!g_bombs[i].active)
+            continue;
+
+        DrawWorldImage(graphics, g_bombProjectileFrame, g_bombs[i].x, g_bombs[i].y, g_bombs[i].w, g_bombs[i].h);
+    }
+}
+
+void DrawBombExplosions(Graphics& graphics)
+{
+    // 68번 폭발 프레임은 사용하지 않음.
+    // 폭탄이 바닥에 닿으면 내부 판정만 처리하고 화면에는 폭발 이미지를 그리지 않음.
+    return;
+}
+
+RECT GetPowerProjectileRect()
+{
+    RECT rc;
+
+    rc.left = powerProjectileX;
+    rc.top = powerProjectileY;
+    rc.right = powerProjectileX + powerProjectileW;
+    rc.bottom = powerProjectileY + powerProjectileH;
+
+    return rc;
+}
+
+RECT GetPowerProjectileSweepRect()
+{
+    RECT rc;
+
+    // 이전 위치와 현재 위치를 모두 포함하는 사각형을 만들어서
+    // 발사체가 빨리 움직여도 몬스터를 뚫고 지나가는 문제를 줄임
+    int oldLeft = powerProjectilePrevX;
+    int oldRight = powerProjectilePrevX + powerProjectileW;
+    int newLeft = powerProjectileX;
+    int newRight = powerProjectileX + powerProjectileW;
+
+    rc.left = oldLeft < newLeft ? oldLeft : newLeft;
+    rc.right = oldRight > newRight ? oldRight : newRight;
+    rc.top = powerProjectileY;
+    rc.bottom = powerProjectileY + powerProjectileH;
+
+    return rc;
+}
+
+void CheckPowerProjectileHitMonsters()
+{
+    if (!isPowerProjectileActive)
+        return;
+
+    RECT projectileRc = GetPowerProjectileSweepRect();
+
+    for (int i = 0; i < MONSTER_COUNT; i++)
+    {
+        if (!g_monsters[i].active)
+            continue;
+
+        // 공격 판정은 몬스터 보정 히트박스가 아니라 몬스터 전체 크기로 검사
+        // 그래야 PNG34가 보기에는 닿았는데 안 맞는 느낌이 줄어듦
+        RECT monsterRc;
+        monsterRc.left = g_monsters[i].x;
+        monsterRc.top = g_monsters[i].y;
+        monsterRc.right = g_monsters[i].x + g_monsters[i].w;
+        monsterRc.bottom = g_monsters[i].y + g_monsters[i].h;
+
+        if (IsRectHit(projectileRc, monsterRc))
+        {
+            // 충돌하면 발사체는 사라지고, 몬스터는 35번 죽는 프레임을 잠깐 보여준 뒤 사라짐
+            g_monsters[i].StartDeadEffect();
+
+            isPowerProjectileActive = false;
+            return;
+        }
+    }
+}
+
+void CheckFireAttacksHitMonsters()
+{
+    RECT fireBreathRc;
+    bool hasBreath = false;
+
+    if (isFireBreath)
+    {
+        fireBreathRc = GetFireBreathRect();
+        hasBreath = true;
+    }
+
+    RECT fireBallRc;
+    bool hasFireBall = false;
+
+    if (isFireBallActive)
+    {
+        fireBallRc = GetFireBallSweepRect();
+        hasFireBall = true;
+    }
+
+    if (!hasBreath && !hasFireBall)
+        return;
+
+    for (int i = 0; i < MONSTER_COUNT; i++)
+    {
+        if (!g_monsters[i].active)
+            continue;
+
+        RECT monsterRc;
+        monsterRc.left = g_monsters[i].x;
+        monsterRc.top = g_monsters[i].y;
+        monsterRc.right = g_monsters[i].x + g_monsters[i].w;
+        monsterRc.bottom = g_monsters[i].y + g_monsters[i].h;
+
+        if (hasBreath && IsRectHit(fireBreathRc, monsterRc))
+        {
+            g_monsters[i].StartDeadEffect();
+            continue;
+        }
+
+        if (hasFireBall && IsRectHit(fireBallRc, monsterRc))
+        {
+            g_monsters[i].StartDeadEffect();
+            isFireBallActive = false;
+            return;
+        }
+    }
+}
+
+void CheckKirbyHitByMonsters()
+{
+    // 빨아들이는 중에는 몬스터를 끌어와서 먹는 판정이 있으니 몸통 데미지는 끔
+    if (isAbsorb)
+        return;
+
+    if (isKirbyHit)
+        return;
+
+    if (kirbyHitCooldownTick > 0)
+        return;
+
+    RECT kirbyRc = GetKirbyBodyRect();
+
+    for (int i = 0; i < MONSTER_COUNT; i++)
+    {
+        if (!g_monsters[i].active)
+            continue;
+
+        RECT monsterRc;
+        monsterRc.left = g_monsters[i].x;
+        monsterRc.top = g_monsters[i].y;
+        monsterRc.right = g_monsters[i].x + g_monsters[i].w;
+        monsterRc.bottom = g_monsters[i].y + g_monsters[i].h;
+
+        // 몬스터 몸에 닿거나, 몬스터가 점프 공격 중인 몸에 닿으면 37번 프레임 표시
+        if (IsRectHit(kirbyRc, monsterRc))
+        {
+            StartKirbyHitEffect();
+            return;
+        }
+    }
+}
+
+
+void DrawImageFlipX(Graphics& graphics, Image* image, int x, int y, int w, int h)
+{
+    if (image == NULL)
+        return;
+
+    if (!IsVisibleWorld(x, y, w, h))
+        return;
+
+    GraphicsState state = graphics.Save();
+
+    graphics.TranslateTransform((REAL)(x + w), (REAL)y);
+    graphics.ScaleTransform(-1.0f, 1.0f);
+
+    graphics.DrawImage(image, 0, 0, w, h);
+
+    graphics.Restore(state);
+}
+
+void DrawKirbyImage(Graphics& graphics, Image* image)
+{
+    if (image == NULL)
+        return;
+
+    if (kirbyFaceLeft)
+    {
+        DrawImageFlipX(graphics, image, kirbyX, kirbyY, kirbyW, kirbyH);
+    }
+    else
+    {
+        DrawWorldImage(graphics, image, kirbyX, kirbyY, kirbyW, kirbyH);
+    }
+}
+
+void Monster::Draw(Graphics& graphics)
+{
+    if (!IsVisibleWorld(x, y, w, h))
+        return;
+
+    if (isDeadEffect)
+    {
+        Image* deadFrame = g_monsterDeadFrame;
+
+        // 불속성 몬스터는 71번 죽는 프레임 사용
+        if (monsterType == 1 && g_fireMonsterDeadFrame != NULL)
+        {
+            deadFrame = g_fireMonsterDeadFrame;
+        }
+        // 폭탄 몬스터는 67번 죽는 프레임 사용
+        else if (monsterType == 2 && g_bombMonsterDeadFrame != NULL)
+        {
+            deadFrame = g_bombMonsterDeadFrame;
+        }
+
+        if (deadFrame == NULL)
+            return;
+
+        if (dir == -1)
+        {
+            DrawImageFlipX(graphics, deadFrame, x, y, w, h);
+        }
+        else
+        {
+            DrawWorldImage(graphics, deadFrame, x, y, w, h);
+        }
+
+        return;
+    }
+
+    if (!active)
+        return;
+
+    if (isJumpAttack)
+    {
+        Image* jumpFrame = g_monsterJumpFrames[jumpAttackFrameIndex];
+
+        if (jumpFrame == NULL)
+            return;
+
+        if (dir == -1)
+        {
+            DrawImageFlipX(graphics, jumpFrame, x, y, w, h);
+        }
+        else
+        {
+            DrawWorldImage(graphics, jumpFrame, x, y, w, h);
+        }
+
+        return;
+    }
+
+    Image* frame = NULL;
+
+    if (monsterType == 1)
+    {
+        frame = g_fireMonsterFrame; // 불속성 몬스터 몸은 항상 PNG48
+    }
+    else if (monsterType == 2)
+    {
+        frame = g_bombMonsterFrame; // 하늘 폭탄 몬스터 몸은 PNG66
+    }
+    else
+    {
+        frame = g_monsterFrames[frameIndex];
+    }
+
+    if (frame == NULL)
+        return;
+
+    if (dir == -1)
+    {
+        DrawImageFlipX(graphics, frame, x, y, w, h);
+    }
+    else
+    {
+        DrawWorldImage(graphics, frame, x, y, w, h);
+    }
+}
+
+
 // =========================
 // 4스테이지 보스전
 // 95: 기본/이동, 93: 미사일 공격 자세, 96: 미사일
 // 94: 대각선 돌진, 99: 2페이즈 기본, 98: 2페이즈 상단 폭탄 자세, 97: 입 폭탄
 // 100/101: 보스맵 입장 후 계속 위에서 떨어지는 공격
 // =========================
-const int BOSS_MAX_HP = 1000; // Boss HP
+const int BOSS_MAX_HP = 650; // 보스 체력 증가
 const int BOSS_W = 72;   // 커비 기본 크기 48의 1.5배
 const int BOSS_H = 72;   // 커비 기본 크기 48의 1.5배
 const int BOSS_PHASE2_W = 200; // 2페이즈 99번 모습을 더 크게 표시
@@ -1095,12 +4159,6 @@ const int BOSS_GROUND_Y = 545 - BOSS_H;
 const int BOSS_PHASE2_GROUND_Y = 545 - BOSS_PHASE2_H;
 const int BOSS_TOP_Y = 65;
 const float BOSS_DASH_GRAVITY = 0.42f;
-const int BOSS_PHASE2_TRANSITION_TOTAL = 92;
-const int BOSS_PHASE2_SHAKE_TICKS = 18;
-const int BOSS_PHASE2_BLACK_END = 44;
-const int BOSS_PHASE2_DROP_END = 74;
-const int BOSS_PHASE2_DROP_START_Y = 8;
-const int BOSS_BERSERK_HEAL_Y = 160;
 
 enum BossState
 {
@@ -1173,32 +4231,7 @@ int g_bossPhase2TransitionTick = 0;
 bool g_bossDeadEffect = false;
 int g_bossDeadEffectTick = 0;
 bool g_bossClear = false;
-bool g_bossBerserkMode = false;
-bool g_bossBerserkHealActive = false;
-bool g_bossBerserkHealDone = false;
-int g_bossBerserkHealTick = 0;
-int g_bossBerserkHealStartHP = 0;
-bool g_bossBerserkDropActive = false;
-int g_bossBerserkDropTick = 0;
-int g_bossTopBombShakeCount = 0;
 int g_screenShakeTick = 0;
-
-// Camera action effects. Only world drawing uses these offsets, so HUD stays fixed.
-int g_cameraShakeTick = 0;
-int g_cameraShakePower = 0;
-int g_cameraOffsetX = 0;
-int g_cameraOffsetY = 0;
-int g_cameraPushTick = 0;
-int g_cameraPushDuration = 0;
-int g_cameraPushDir = 0;
-int g_cameraPushPower = 0;
-int g_edgeEffectTick = 0;
-int g_bossBerserkFogTick = 0;
-
-// Stage ambient quakes: stage 1/2/3 shake 1/2/3 times at random moments.
-int g_stageRandomShakeStage = 0;
-int g_stageRandomShakeDone = 0;
-int g_stageRandomShakeCooldown = 0;
 
 // 보스 처치 후 보상/문 연출
 bool g_rewardStarted = false;
@@ -1251,132 +4284,6 @@ int RandomRange(int minValue, int maxValue)
         return minValue;
 
     return minValue + rand() % (maxValue - minValue + 1);
-}
-
-void StartCameraShake(int power, int duration)
-{
-    if (power <= 0 || duration <= 0)
-        return;
-
-    if (power > g_cameraShakePower || duration > g_cameraShakeTick)
-    {
-        g_cameraShakePower = power;
-        g_cameraShakeTick = duration;
-    }
-}
-
-void UpdateCameraShake()
-{
-    if (g_cameraShakeTick > 0)
-    {
-        int range = g_cameraShakePower * 2 + 1;
-        g_cameraOffsetX = rand() % range - g_cameraShakePower;
-        g_cameraOffsetY = rand() % range - g_cameraShakePower;
-        g_cameraShakeTick--;
-
-        if (g_cameraShakeTick <= 0)
-        {
-            g_cameraShakePower = 0;
-            g_cameraOffsetX = 0;
-            g_cameraOffsetY = 0;
-        }
-    }
-    else
-    {
-        g_cameraOffsetX = 0;
-        g_cameraOffsetY = 0;
-    }
-}
-
-void StartCameraPush(int dir, int power, int duration)
-{
-    if (power <= 0 || duration <= 0)
-        return;
-
-    if (dir < 0)
-        dir = -1;
-    else
-        dir = 1;
-
-    g_cameraPushDir = dir;
-    g_cameraPushPower = power;
-    g_cameraPushDuration = duration;
-    g_cameraPushTick = duration;
-}
-
-void UpdateCameraPush()
-{
-    if (g_cameraPushTick > 0)
-    {
-        g_cameraPushTick--;
-
-        if (g_cameraPushTick <= 0)
-        {
-            g_cameraPushTick = 0;
-            g_cameraPushDuration = 0;
-            g_cameraPushDir = 0;
-            g_cameraPushPower = 0;
-        }
-    }
-}
-
-int GetCameraPushOffsetX()
-{
-    if (g_cameraPushTick <= 0 || g_cameraPushDuration <= 0)
-        return 0;
-
-    return g_cameraPushDir * g_cameraPushPower * g_cameraPushTick / g_cameraPushDuration;
-}
-
-int GetCameraDrawOffsetX()
-{
-    if (g_starTransitionActive || g_isChangingMap)
-        return 0;
-
-    return g_cameraOffsetX + GetCameraPushOffsetX();
-}
-
-int GetCameraDrawOffsetY()
-{
-    if (g_starTransitionActive || g_isChangingMap)
-        return 0;
-
-    return g_cameraOffsetY;
-}
-
-void UpdateStageRandomCameraShake()
-{
-    if (g_currentStage < 1 || g_currentStage > 3)
-    {
-        g_stageRandomShakeStage = 0;
-        g_stageRandomShakeDone = 0;
-        g_stageRandomShakeCooldown = 0;
-        return;
-    }
-
-    if (isGameOver || g_retryActive || g_isPaused)
-        return;
-
-    if (g_stageRandomShakeStage != g_currentStage)
-    {
-        g_stageRandomShakeStage = g_currentStage;
-        g_stageRandomShakeDone = 0;
-        g_stageRandomShakeCooldown = RandomRange(90, 180);
-    }
-
-    int targetShakeCount = g_currentStage;
-    if (g_stageRandomShakeDone >= targetShakeCount)
-        return;
-
-    if (g_stageRandomShakeCooldown > 0)
-    {
-        g_stageRandomShakeCooldown--;
-        return;
-    }
-
-    StartCameraShake(2 + g_currentStage, 5 + g_currentStage);
-    g_stageRandomShakeDone++;
-    g_stageRandomShakeCooldown = RandomRange(140, 260);
 }
 
 RECT GetBossRect()
@@ -1439,7 +4346,7 @@ int GetBossGroundY()
     return BOSS_GROUND_Y;
 }
 
-void ApplyBossPhase2Form()
+void StartBossPhase2()
 {
     if (g_boss.phase2)
         return;
@@ -1456,35 +4363,30 @@ void ApplyBossPhase2Form()
 
     if (g_boss.x + g_boss.w > BG_PART_W - 70)
         g_boss.x = BG_PART_W - 70 - g_boss.w;
-}
 
-void StartBossPhase2()
-{
-    if (g_boss.phase2 || g_bossPhase2Transition)
-        return;
-
+    // 2페이즈 전환 연출: 공격을 잠깐 멈추고 화면 흔들림/변신 느낌을 줌
     ResetBossProjectiles();
     ResetBossWarnings();
     g_bossPhase2Transition = true;
-    g_bossPhase2TransitionTick = BOSS_PHASE2_TRANSITION_TOTAL;
-    g_screenShakeTick = BOSS_PHASE2_SHAKE_TICKS;
-    StartCameraShake(12, 25);
-    // 2페이즈 패턴은 전환 연출이 끝난 뒤부터 시작되도록 여유를 둠.
-    g_boss.fastDashCooldown = RandomRange(95, 150);
+    g_bossPhase2TransitionTick = 45;
+    g_screenShakeTick = 25;
+
+    g_boss.fastDashCooldown = RandomRange(55, 95);
     g_boss.dangerTextTick = 50;
-    g_boss.topBombCooldown = 130;
-    g_bossSideBallCooldown = 70;
-    g_bossSpreadShotCooldown = 120;
-    g_bossGroundWaveCooldown = 145;
-    g_bossRainBurstCooldown = 180;
-    g_bossAimedShotCooldown = 85;
-    g_bossWallRainCooldown = 165;
-    g_bossZigzagCooldown = 120;
-    g_bossBounceCooldown = 150;
-    g_bossHalfFloorCooldown = 180;
+    g_boss.topBombCooldown = 80;
+    g_bossSideBallCooldown = 35;
+    g_bossSpreadShotCooldown = 70;
+    g_bossGroundWaveCooldown = 95;
+    g_bossRainBurstCooldown = 120;
+    g_bossAimedShotCooldown = 45;
+    g_bossWallRainCooldown = 105;
+    g_bossZigzagCooldown = 75;
+    g_bossBounceCooldown = 100;
+    g_bossHalfFloorCooldown = 120;
 
     g_boss.state = BOSS_STATE_IDLE;
-    g_boss.vx = 0.0f;
+    g_boss.y = BOSS_PHASE2_GROUND_Y;
+    g_boss.vx = (float)(2 * g_boss.dir);
     g_boss.vy = 0.0f;
 }
 
@@ -1500,24 +4402,7 @@ void InitBossObjects()
     g_bossDeadEffect = false;
     g_bossDeadEffectTick = 0;
     g_bossClear = false;
-    g_bossBerserkMode = false;
-    g_bossBerserkHealActive = false;
-    g_bossBerserkHealDone = false;
-    g_bossBerserkHealTick = 0;
-    g_bossBerserkHealStartHP = 0;
-    g_bossBerserkDropActive = false;
-    g_bossBerserkDropTick = 0;
-    g_bossBerserkFogTick = 0;
-    g_bossTopBombShakeCount = 0;
     g_screenShakeTick = 0;
-    g_cameraShakeTick = 0;
-    g_cameraShakePower = 0;
-    g_cameraOffsetX = 0;
-    g_cameraOffsetY = 0;
-    g_cameraPushTick = 0;
-    g_cameraPushDuration = 0;
-    g_cameraPushDir = 0;
-    g_cameraPushPower = 0;
 
     g_rewardStarted = false;
     g_rewardChestActive = false;
@@ -1541,46 +4426,31 @@ void InitBossObjects()
     g_boss.dir = -1;
     g_boss.state = BOSS_STATE_IDLE;
     g_boss.actionTick = 0;
-    // 보스 기본 패턴 시작 간격 조절: 숫자가 클수록 공격을 늦게 시작함
-    g_boss.missileCooldown = 85;
-    g_boss.dashCooldown = 170;
-    g_boss.topBombCooldown = 220;
-    g_boss.fastDashCooldown = 170;
+    g_boss.missileCooldown = 45;
+    g_boss.dashCooldown = 110;
+    g_boss.topBombCooldown = 150;
+    g_boss.fastDashCooldown = 110;
     g_boss.hitCooldown = 0;
     g_boss.redFlashTick = 0;
     g_boss.dangerTextTick = 0;
     g_boss.vx = -2.0f;
     g_boss.vy = 0.0f;
 
-    // 보스 투사체 패턴 시작 간격 조절: 숫자가 클수록 처음 패턴이 늦게 나옴
-    g_bossRainAttackCooldown = 35;
-    g_bossRainBombCooldown = 60;
-    g_bossSideBallCooldown = 100;
-    g_bossSpreadShotCooldown = 140;
-    g_bossGroundWaveCooldown = 180;
-    g_bossRainBurstCooldown = 210;
-    g_bossAimedShotCooldown = 115;
-    g_bossWallRainCooldown = 240;
-    g_bossZigzagCooldown = 175;
-    g_bossBounceCooldown = 210;
-    g_bossHalfFloorCooldown = 260;
+    g_bossRainAttackCooldown = 18;
+    g_bossRainBombCooldown = 35;
+    g_bossSideBallCooldown = 70;
+    g_bossSpreadShotCooldown = 95;
+    g_bossGroundWaveCooldown = 125;
+    g_bossRainBurstCooldown = 150;
+    g_bossAimedShotCooldown = 70;
+    g_bossWallRainCooldown = 180;
+    g_bossZigzagCooldown = 120;
+    g_bossBounceCooldown = 145;
+    g_bossHalfFloorCooldown = 190;
 }
 
 void SpawnBossProjectile(int type, int x, int y, int w, int h, float vx, float vy)
 {
-    if (g_bossBerserkMode && !g_bossBerserkHealActive)
-    {
-        int activeCount = 0;
-        for (int i = 0; i < BOSS_PROJECTILE_MAX; i++)
-        {
-            if (g_bossProjectiles[i].active)
-                activeCount++;
-        }
-
-        if (activeCount >= 28)
-            return;
-    }
-
     for (int i = 0; i < BOSS_PROJECTILE_MAX; i++)
     {
         if (!g_bossProjectiles[i].active)
@@ -1863,9 +4733,6 @@ void DamageBoss(int damage)
     if (!g_boss.active)
         return;
 
-    if (g_bossBerserkHealActive)
-        return;
-
     if (damage <= 0)
         return;
 
@@ -1873,27 +4740,19 @@ void DamageBoss(int damage)
     g_boss.hitCooldown = 10;
     g_boss.redFlashTick = 6;
     g_boss.dangerTextTick = 10;
-    g_screenShakeTick = 0;
+    g_screenShakeTick = 7;
 
     if (g_boss.hp <= BOSS_MAX_HP / 2)
         StartBossPhase2();
-
-    if (g_boss.phase2 && !g_bossBerserkHealDone && g_boss.hp > 0 && g_boss.hp <= BOSS_MAX_HP * 15 / 100)
-    {
-        StartBossBerserkHeal();
-        return;
-    }
 
     if (g_boss.hp <= 0)
     {
         g_boss.hp = 0;
         g_boss.active = false;
         g_bossClear = true;
-        AddGameScore(3000);
         g_bossDeadEffect = true;
         g_bossDeadEffectTick = 80;
         g_screenShakeTick = 35;
-        StartCameraShake(12, 30);
         ResetBossProjectiles();
         ResetBossWarnings();
     }
@@ -2010,7 +4869,7 @@ void UpdateBossProjectiles()
             {
                 g_bossProjectiles[i].type = 13;
                 g_bossProjectiles[i].tick = 0;
-                g_screenShakeTick = 0;
+                g_screenShakeTick = 8;
             }
         }
 
@@ -2091,72 +4950,6 @@ void UpdateBossRewardObjects();
 void TryBossRewardInteraction();
 void DrawBossRewardObjects(Graphics& graphics);
 
-void StartBossBerserkHeal()
-{
-    if (g_bossBerserkHealDone || g_bossBerserkHealActive || !g_boss.active || !g_boss.phase2)
-        return;
-
-    g_bossBerserkMode = true;
-    g_bossBerserkHealActive = true;
-    g_bossBerserkHealDone = true;
-    g_bossBerserkHealTick = 90;
-    g_bossBerserkHealStartHP = g_boss.hp;
-    g_bossBerserkDropActive = false;
-    g_bossBerserkDropTick = 0;
-
-    ResetBossProjectiles();
-    ResetBossWarnings();
-
-    g_boss.state = BOSS_STATE_IDLE;
-    g_boss.x = BG_PART_W / 2 - g_boss.w / 2;
-    g_boss.y = BOSS_BERSERK_HEAL_Y;
-    g_boss.vx = 0.0f;
-    g_boss.vy = 0.0f;
-    g_boss.dangerTextTick = 40;
-
-    StartCameraShake(8, 18);
-}
-
-void UpdateBossBerserkHeal()
-{
-    if (!g_bossBerserkHealActive)
-        return;
-
-    g_bossBerserkHealTick--;
-
-    g_boss.x = BG_PART_W / 2 - g_boss.w / 2;
-    g_boss.y = BOSS_BERSERK_HEAL_Y;
-    g_boss.vx = 0.0f;
-    g_boss.vy = 0.0f;
-    g_boss.redFlashTick = 0;
-
-    int targetHP = BOSS_MAX_HP * 30 / 100;
-    int elapsed = 90 - g_bossBerserkHealTick;
-    if (elapsed < 0) elapsed = 0;
-    if (elapsed > 90) elapsed = 90;
-
-    if (g_boss.hp < targetHP)
-        g_boss.hp = g_bossBerserkHealStartHP + (targetHP - g_bossBerserkHealStartHP) * elapsed / 90;
-
-    if (g_bossBerserkHealTick <= 0)
-    {
-        g_boss.hp = targetHP;
-        g_bossBerserkHealActive = false;
-        g_bossBerserkHealTick = 0;
-        g_bossBerserkDropActive = true;
-        g_bossBerserkDropTick = 0;
-        g_boss.vx = 0.0f;
-        g_boss.vy = 0.0f;
-        ResetBossProjectiles();
-        ResetBossWarnings();
-    }
-}
-
-bool IsBossBerserk()
-{
-    return g_currentStage == 4 && g_boss.active && g_boss.phase2 && g_bossBerserkMode;
-}
-
 void UpdateBossObjects()
 {
     if (g_currentStage != 4)
@@ -2204,54 +4997,7 @@ void UpdateBossObjects()
         if (g_boss.y >= groundY && g_bossIntroTick > 45)
         {
             g_bossIntro = false;
-            g_screenShakeTick = 0;
-        }
-
-        return;
-    }
-
-    if (g_bossBerserkHealActive)
-    {
-        UpdateBossBerserkHeal();
-        return;
-    }
-
-    if (g_bossBerserkDropActive)
-    {
-        const int BERSERK_DROP_TOTAL = 30;
-        int targetY = BOSS_PHASE2_GROUND_Y;
-        g_bossBerserkDropTick++;
-
-        if (g_bossBerserkDropTick > BERSERK_DROP_TOTAL)
-            g_bossBerserkDropTick = BERSERK_DROP_TOTAL;
-
-        g_boss.x = BG_PART_W / 2 - g_boss.w / 2;
-        g_boss.y = BOSS_BERSERK_HEAL_Y + (targetY - BOSS_BERSERK_HEAL_Y) * g_bossBerserkDropTick / BERSERK_DROP_TOTAL;
-        g_boss.vx = 0.0f;
-        g_boss.vy = 0.0f;
-        FaceBossToKirby();
-        ResetBossProjectiles();
-        ResetBossWarnings();
-
-        if (g_bossBerserkDropTick >= BERSERK_DROP_TOTAL)
-        {
-            g_bossBerserkDropActive = false;
-            g_bossBerserkDropTick = 0;
-            g_boss.y = targetY;
-            g_boss.vx = (float)(2 * g_boss.dir);
-            g_bossRainAttackCooldown = 28;
-            g_bossRainBombCooldown = 42;
-            g_bossSideBallCooldown = 50;
-            g_bossSpreadShotCooldown = 95;
-            g_bossGroundWaveCooldown = 115;
-            g_bossRainBurstCooldown = 125;
-            g_bossAimedShotCooldown = 80;
-            g_bossWallRainCooldown = 170;
-            g_bossZigzagCooldown = 90;
-            g_bossBounceCooldown = 115;
-            g_boss.topBombCooldown = 110;
-            g_boss.fastDashCooldown = 85;
-            StartCameraShake(5, 10);
+            g_screenShakeTick = 12;
         }
 
         return;
@@ -2259,91 +5005,33 @@ void UpdateBossObjects()
 
     if (g_bossPhase2Transition)
     {
-        int elapsed = BOSS_PHASE2_TRANSITION_TOTAL - g_bossPhase2TransitionTick;
         g_bossPhase2TransitionTick--;
+        g_screenShakeTick = 4;
 
-        ResetBossProjectiles();
-        ResetBossWarnings();
-
-        if (elapsed < BOSS_PHASE2_SHAKE_TICKS)
+        if (g_bossPhase2TransitionTick <= 0)
         {
-            g_screenShakeTick = 2;
-            if (elapsed % 4 == 0)
-                g_boss.redFlashTick = 8;
-            return;
+            g_bossPhase2Transition = false;
+            g_bossPhase2TransitionTick = 0;
         }
 
-        if (elapsed < BOSS_PHASE2_BLACK_END)
-        {
-            ApplyBossPhase2Form();
-            g_boss.x = BG_PART_W / 2 - g_boss.w / 2;
-            g_boss.y = BOSS_PHASE2_DROP_START_Y;
-            g_boss.vx = 0.0f;
-            g_boss.vy = 0.0f;
-            return;
-        }
-
-        if (elapsed < BOSS_PHASE2_DROP_END)
-        {
-            ApplyBossPhase2Form();
-            int dropTick = elapsed - BOSS_PHASE2_BLACK_END;
-            int dropTotal = BOSS_PHASE2_DROP_END - BOSS_PHASE2_BLACK_END;
-            int targetY = BOSS_PHASE2_GROUND_Y;
-
-            g_boss.x = BG_PART_W / 2 - g_boss.w / 2;
-            g_boss.y = BOSS_PHASE2_DROP_START_Y + (targetY - BOSS_PHASE2_DROP_START_Y) * dropTick / dropTotal;
-            FaceBossToKirby();
-
-            if (dropTick >= dropTotal - 4)
-                g_screenShakeTick = 8;
-
-            return;
-        }
-
-        if (elapsed < BOSS_PHASE2_TRANSITION_TOTAL)
-        {
-            ApplyBossPhase2Form();
-            g_boss.y = BOSS_PHASE2_GROUND_Y;
-            FaceBossToKirby();
-            if (elapsed == BOSS_PHASE2_DROP_END)
-            {
-                g_screenShakeTick = 10;
-                StartCameraShake(10, 18);
-            }
-            return;
-        }
-
-        ApplyBossPhase2Form();
-        g_bossPhase2Transition = false;
-        g_bossPhase2TransitionTick = 0;
-        g_boss.y = BOSS_PHASE2_GROUND_Y;
-        FaceBossToKirby();
-        g_boss.vx = (float)(2 * g_boss.dir);
-        g_boss.vy = 0.0f;
-        g_screenShakeTick = 10;
-        StartCameraShake(10, 18);
         return;
     }
 
     UpdateBossWarnings();
-
-    bool bossBerserk = IsBossBerserk();
-    if (bossBerserk)
-        g_boss.dangerTextTick = 8;
 
     // 4스테이지에 들어온 순간부터 100번/101번 낙하 공격은 계속 떨어짐
     g_bossRainAttackCooldown--;
     if (g_bossRainAttackCooldown <= 0)
     {
         SpawnBossRainAttack();
-        g_bossRainAttackCooldown = bossBerserk ? RandomRange(28, 44) : RandomRange(35, 60); // 숫자가 클수록 하늘 공격 간격 증가
+        g_bossRainAttackCooldown = RandomRange(18, 35);
     }
 
     g_bossRainBombCooldown--;
     if (g_bossRainBombCooldown <= 0)
     {
         SpawnBossRainBomb();
-        g_bossRainBombCooldown = bossBerserk ? RandomRange(38, 58) : RandomRange(55, 85); // 숫자가 클수록 폭탄 낙하 간격 증가
+        g_bossRainBombCooldown = RandomRange(30, 55);
     }
 
     // 2페이즈부터는 세로 낙하 공격 말고 가로로 지나가는 공도 추가
@@ -2353,7 +5041,7 @@ void UpdateBossObjects()
         if (g_bossSideBallCooldown <= 0)
         {
             SpawnBossSideBall();
-            g_bossSideBallCooldown = bossBerserk ? RandomRange(48, 72) : RandomRange(55, 85); // 숫자가 클수록 가로 공 간격 증가
+            g_bossSideBallCooldown = RandomRange(28, 48);
         }
 
         g_bossRainBurstCooldown--;
@@ -2361,7 +5049,7 @@ void UpdateBossObjects()
         {
             SpawnBossRainBurst();
             g_boss.dangerTextTick = 28;
-            g_bossRainBurstCooldown = bossBerserk ? RandomRange(120, 170) : RandomRange(180, 260);
+            g_bossRainBurstCooldown = RandomRange(125, 190);
         }
     }
 
@@ -2370,7 +5058,7 @@ void UpdateBossObjects()
     {
         SpawnBossSpreadShot();
         g_boss.dangerTextTick = 22;
-        g_bossSpreadShotCooldown = bossBerserk ? RandomRange(95, 135) : (g_boss.phase2 ? RandomRange(130, 190) : RandomRange(180, 240));
+        g_bossSpreadShotCooldown = g_boss.phase2 ? RandomRange(85, 130) : RandomRange(120, 170);
     }
 
     g_bossAimedShotCooldown--;
@@ -2378,7 +5066,7 @@ void UpdateBossObjects()
     {
         SpawnBossAimedShot();
         g_boss.dangerTextTick = 20;
-        g_bossAimedShotCooldown = bossBerserk ? RandomRange(75, 110) : (g_boss.phase2 ? RandomRange(95, 140) : RandomRange(150, 210));
+        g_bossAimedShotCooldown = g_boss.phase2 ? RandomRange(55, 85) : RandomRange(95, 140);
     }
 
     g_bossZigzagCooldown--;
@@ -2386,7 +5074,7 @@ void UpdateBossObjects()
     {
         SpawnBossZigzagShot();
         g_boss.dangerTextTick = 20;
-        g_bossZigzagCooldown = bossBerserk ? RandomRange(85, 125) : (g_boss.phase2 ? RandomRange(110, 160) : RandomRange(180, 240));
+        g_bossZigzagCooldown = g_boss.phase2 ? RandomRange(70, 105) : RandomRange(125, 175);
     }
 
     if (g_boss.phase2)
@@ -2396,7 +5084,7 @@ void UpdateBossObjects()
         {
             SpawnBossGroundWave();
             g_boss.dangerTextTick = 24;
-            g_bossGroundWaveCooldown = bossBerserk ? RandomRange(115, 160) : RandomRange(170, 240);
+            g_bossGroundWaveCooldown = RandomRange(110, 165);
         }
 
         g_bossWallRainCooldown--;
@@ -2404,7 +5092,7 @@ void UpdateBossObjects()
         {
             SpawnBossWallRain();
             g_boss.dangerTextTick = 26;
-            g_bossWallRainCooldown = bossBerserk ? RandomRange(165, 230) : RandomRange(200, 280);
+            g_bossWallRainCooldown = RandomRange(135, 210);
         }
 
         g_bossBounceCooldown--;
@@ -2412,7 +5100,7 @@ void UpdateBossObjects()
         {
             SpawnBossBounceBall();
             g_boss.dangerTextTick = 22;
-            g_bossBounceCooldown = bossBerserk ? RandomRange(110, 155) : RandomRange(160, 230);
+            g_bossBounceCooldown = RandomRange(105, 160);
         }
 
         // 106/107 바닥 절반 폭발 패턴은 어색해서 제거함.
@@ -2443,7 +5131,7 @@ void UpdateBossObjects()
         if (g_boss.actionTick <= 0)
         {
             g_boss.state = BOSS_STATE_IDLE;
-            g_boss.missileCooldown = bossBerserk ? 45 : (g_boss.phase2 ? 100 : 140);
+            g_boss.missileCooldown = g_boss.phase2 ? 60 : 85;
         }
 
         CheckBossBodyHitKirby();
@@ -2482,7 +5170,7 @@ void UpdateBossObjects()
             g_boss.state = BOSS_STATE_IDLE;
             g_boss.vx = (float)(2 * g_boss.dir);
             g_boss.vy = 0.0f;
-            g_boss.dashCooldown = bossBerserk ? 70 : (g_boss.phase2 ? 150 : 210);
+            g_boss.dashCooldown = g_boss.phase2 ? 95 : 130;
             return;
         }
 
@@ -2501,7 +5189,6 @@ void UpdateBossObjects()
         else
         {
             g_boss.y = BOSS_TOP_Y;
-            g_bossTopBombShakeCount = 0;
             g_boss.state = BOSS_STATE_TOP_BOMB;
             g_boss.actionTick = 95;
             g_boss.vx = (g_boss.x < BG_PART_W / 2) ? 3.0f : -3.0f;
@@ -2529,7 +5216,7 @@ void UpdateBossObjects()
         {
             g_boss.y = groundY;
             g_boss.state = BOSS_STATE_IDLE;
-            g_boss.topBombCooldown = bossBerserk ? RandomRange(75, 110) : RandomRange(190, 260);
+            g_boss.topBombCooldown = RandomRange(120, 180);
         }
 
         CheckBossBodyHitKirby();
@@ -2564,7 +5251,7 @@ void UpdateBossObjects()
         {
             g_boss.state = BOSS_STATE_IDLE;
             g_boss.vx = (float)(2 * g_boss.dir);
-            g_boss.fastDashCooldown = bossBerserk ? RandomRange(55, 85) : RandomRange(120, 190);
+            g_boss.fastDashCooldown = RandomRange(75, 135);
         }
 
         return;
@@ -2591,14 +5278,7 @@ void UpdateBossObjects()
         }
 
         if (g_boss.actionTick % 12 == 0)
-        {
             SpawnBossMouthBomb();
-            if (g_bossTopBombShakeCount < 2)
-            {
-                StartCameraShake(7, 12);
-                g_bossTopBombShakeCount++;
-            }
-        }
 
         if (g_boss.actionTick <= 0)
         {
@@ -2653,8 +5333,6 @@ void UpdateBossObjects()
         FaceBossToKirby();
         g_boss.dangerTextTick = 24;
         g_screenShakeTick = 6;
-        StartCameraShake(5, 8);
-        StartCameraPush(g_boss.dir, 18, 20);
         g_boss.vx = 5.6f * g_boss.dir;
         g_boss.vy = -8.2f;
         g_boss.state = BOSS_STATE_DASH;
@@ -2668,8 +5346,6 @@ void UpdateBossObjects()
         g_boss.dangerTextTick = 24;
         g_screenShakeTick = 10;
         int dashDir = RandomRange(0, 1) == 0 ? -1 : 1;
-        StartCameraShake(6, 10);
-        StartCameraPush(dashDir, 22, 24);
         g_boss.dir = dashDir;
         g_boss.vx = 13.0f * dashDir;
         g_boss.vy = 0.0f;
@@ -2740,7 +5416,7 @@ void StartBossRewardObjects()
     g_rewardDoorW = 150;
     g_rewardDoorH = 200;
     g_rewardDoorX = BG_PART_W - g_rewardDoorW - 28;
-    g_rewardDoorY = 410;
+    g_rewardDoorY = 545 - g_rewardDoorH + 8;
     g_rewardDoorFrameIndex = 0;
     g_rewardDoorFrameTick = 0;
 }
@@ -2765,7 +5441,7 @@ void UpdateBossRewardObjects()
 
     if (g_rewardChestActive && !g_rewardChestLanded)
     {
-        g_rewardChestY += 6;
+        g_rewardChestY += 4;
         if (g_rewardChestY >= g_rewardChestTargetY)
         {
             g_rewardChestY = g_rewardChestTargetY;
@@ -2800,8 +5476,6 @@ void UpdateBossRewardObjects()
                 g_rewardDoorOpening = false;
                 g_rewardDoorOpened = true;
                 g_rewardDoorFrameIndex = 3;
-                PlayGameSound(SFX_DOOR);
-                StartStageClearMessage();
             }
         }
     }
@@ -2894,8 +5568,21 @@ void DrawBossHpBar(Graphics& graphics)
     Font bigFont(&fontFamily, 32, FontStyleBold, UnitPixel);
     SolidBrush textBrush(Color(230, 255, 230, 255));
     SolidBrush clearBrush(Color(240, 255, 230, 120));
+
+    if (g_bossClear)
+    {
+        graphics.DrawString(L"BOSS CLEAR!", -1, &bigFont, PointF(390.0f, 80.0f), &clearBrush);
+        return;
+    }
+
     if (!g_boss.active)
         return;
+
+    if (g_bossIntro)
+        graphics.DrawString(L"WARNING", -1, &bigFont, PointF(410.0f, 74.0f), &textBrush);
+
+    if (g_bossPhase2Transition)
+        graphics.DrawString(L"PHASE 2", -1, &bigFont, PointF(410.0f, 74.0f), &textBrush);
 
     int barX = 250;
     int barY = 24;
@@ -3050,76 +5737,12 @@ void DrawBossPatternText(Graphics& graphics)
     return;
 }
 
-void DrawBossPhase2TransitionOverlay(Graphics& graphics, int screenW, int screenH)
-{
-    if (g_currentStage != 4 || !g_bossPhase2Transition)
-        return;
-
-    int elapsed = BOSS_PHASE2_TRANSITION_TOTAL - g_bossPhase2TransitionTick;
-    if (elapsed < 0)
-        elapsed = 0;
-
-    int alpha = 0;
-    bool redFlash = false;
-
-    if (elapsed < BOSS_PHASE2_SHAKE_TICKS)
-    {
-        alpha = (elapsed % 4 < 2) ? 65 : 20;
-        redFlash = true;
-    }
-    else if (elapsed < BOSS_PHASE2_BLACK_END)
-    {
-        alpha = 248;
-    }
-    else if (elapsed < BOSS_PHASE2_DROP_END)
-    {
-        int fadeTick = elapsed - BOSS_PHASE2_BLACK_END;
-        int fadeTotal = BOSS_PHASE2_DROP_END - BOSS_PHASE2_BLACK_END;
-        alpha = 248 - 210 * fadeTick / fadeTotal;
-    }
-    else if (elapsed < BOSS_PHASE2_TRANSITION_TOTAL)
-    {
-        alpha = 30;
-        redFlash = true;
-    }
-
-    if (alpha > 0)
-    {
-        SolidBrush darkBrush(redFlash ? Color(alpha, 120, 0, 20) : Color(alpha, 0, 0, 0));
-        graphics.FillRectangle(&darkBrush, 0, 0, screenW, screenH);
-    }
-
-    if (elapsed >= BOSS_PHASE2_SHAKE_TICKS && elapsed < BOSS_PHASE2_DROP_END)
-    {
-        FontFamily fontFamily(L"Arial");
-        Font dangerFont(&fontFamily, 42, FontStyleBold, UnitPixel);
-        Font smallFont(&fontFamily, 18, FontStyleBold, UnitPixel);
-        StringFormat format;
-        format.SetAlignment(StringAlignmentCenter);
-        format.SetLineAlignment(StringAlignmentCenter);
-
-        int textAlpha = 255;
-        if (elapsed >= BOSS_PHASE2_BLACK_END)
-        {
-            int fadeTick = elapsed - BOSS_PHASE2_BLACK_END;
-            int fadeTotal = BOSS_PHASE2_DROP_END - BOSS_PHASE2_BLACK_END;
-            textAlpha = 255 - 210 * fadeTick / fadeTotal;
-        }
-
-        SolidBrush dangerBrush(Color(textAlpha, 255, 40, 70));
-        SolidBrush smallBrush(Color(textAlpha, 255, 230, 230));
-        RectF dangerRect(0.0f, 150.0f, (REAL)screenW, 52.0f);
-        RectF smallRect(0.0f, 200.0f, (REAL)screenW, 30.0f);
-        graphics.DrawString(L"DANGER", -1, &dangerFont, dangerRect, &format, &dangerBrush);
-        graphics.DrawString(L"NIGHTMARE PHASE 2", -1, &smallFont, smallRect, &format, &smallBrush);
-    }
-}
 void DrawBossHitRedFlash(Graphics& graphics)
 {
     if (g_currentStage != 4 || !g_boss.active)
         return;
 
-    if (g_boss.redFlashTick <= 0 || g_bossBerserkHealActive)
+    if (g_boss.redFlashTick <= 0)
         return;
 
     int alpha = 80 + g_boss.redFlashTick * 22;
@@ -3135,7 +5758,7 @@ void DrawNightmareParticles(Graphics& graphics)
         return;
 
     // 간단한 보라색 입자. 리소스 없이도 보스맵 분위기를 살림
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 26; i++)
     {
         int x = (i * 73 + g_bossIntroTick * 3 + g_boss.hp) % BG_PART_W;
         int y = (i * 47 + g_bossIntroTick * 5 + g_boss.phase2 * 120) % 520;
@@ -3148,55 +5771,6 @@ void DrawNightmareParticles(Graphics& graphics)
     }
 }
 
-void DrawBossBerserkHealEffect(Graphics& graphics)
-{
-    if (!g_bossBerserkHealActive)
-        return;
-
-    int cx = g_boss.x + g_boss.w / 2;
-    int cy = g_boss.y + g_boss.h / 2;
-    int t = 90 - g_bossBerserkHealTick;
-    if (t < 0) t = 0;
-
-    const double PI = 3.14159265358979323846;
-
-    // 1/2 PNG swirl in from 360 degrees. This is only a heal effect, not an attack.
-    for (int i = 0; i < 8; i++)
-    {
-        Image* absorbFrame = (((t / 5) + i) % 2 == 0) ? g_bossBerserkAbsorbFrame1 : g_bossBerserkAbsorbFrame2;
-        double angle = i * PI * 2.0 / 8.0 + t * 0.05;
-        float local = (float)((t * 3 + i * 31) % 100) / 100.0f;
-        float radius = 500.0f - local * 420.0f;
-        float squashY = 0.64f;
-
-        int tailX = cx + (int)(cos(angle) * (radius + 105.0f));
-        int tailY = cy + (int)(sin(angle) * (radius + 105.0f) * squashY);
-        int headX = cx + (int)(cos(angle) * radius);
-        int headY = cy + (int)(sin(angle) * radius * squashY);
-        int coreX = cx + (int)(cos(angle) * 38.0f);
-        int coreY = cy + (int)(sin(angle) * 24.0f);
-
-        if (absorbFrame == NULL)
-            continue;
-
-        int drawW = 112 - (int)(local * 18.0f) + (i % 2) * 8;
-        int drawH = drawW;
-        int drawX = headX - drawW / 2;
-        int drawY = headY - drawH / 2;
-
-        if (headX < cx)
-            DrawImageFlipX(graphics, absorbFrame, drawX, drawY, drawW, drawH);
-        else
-            DrawWorldImage(graphics, absorbFrame, drawX, drawY, drawW, drawH);
-    }
-
-    int pulse = (t / 2) % 18;
-    SolidBrush coreGlow(Color(70, 135, 30, 230));
-    graphics.FillEllipse(&coreGlow, cx - 28 - pulse / 2, cy - 28 - pulse / 2, 56 + pulse, 56 + pulse);
-
-    Pen ringPen(Color(180, 150, 45, 255), (REAL)3);
-    graphics.DrawEllipse(&ringPen, cx - 38 - pulse, cy - 38 - pulse, 76 + pulse * 2, 76 + pulse * 2);
-}
 void DrawBossProjectiles(Graphics& graphics)
 {
     for (int i = 0; i < BOSS_PROJECTILE_MAX; i++)
@@ -3260,7 +5834,6 @@ void DrawBossObjects(Graphics& graphics)
     DrawBossLaserDanger(graphics);
     DrawBossWarnings(graphics);
     DrawBossProjectiles(graphics);
-    DrawBossBerserkHealEffect(graphics);
     DrawBossDeathEffect(graphics);
     DrawBossRewardObjects(graphics);
 
@@ -3430,1540 +6003,794 @@ void DrawAbsorbFrontEffect(Graphics& graphics)
     }
 }
 
-#include "resource_manager.cpp"
-
-void DrawHPBar(Graphics& graphics);
-
-const wchar_t* GetStageHudName()
+void DrawPowerProjectile(Graphics& graphics)
 {
-    if (g_currentStage == 1) return L"STAGE 1  NIGHTMARE WOODS";
-    if (g_currentStage == 2) return L"STAGE 2  MOONLESS HILL";
-    if (g_currentStage == 3) return L"STAGE 3  BROKEN DREAM SKY";
-    if (g_currentStage == 4) return L"FINAL STAGE  NIGHTMARE CORE";
-    if (g_currentStage == 5) return L"";
-    return L"KIRBY ADVENTURE";
-}
-
-void GetRescueCount(int* rescued, int* total)
-{
-    if (g_currentStage == 1)
-    {
-        *rescued = g_stage1ChildRescued;
-        *total = g_stage1ChildTotal;
-        return;
-    }
-
-    if (g_currentStage == 2)
-    {
-        *rescued = g_stage2ChildRescued;
-        *total = g_stage2ChildTotal;
-        return;
-    }
-
-    *rescued = 0;
-    *total = 0;
-}
-
-void StartStageTransitionEffect()
-{
-    g_stageFadeTick = STAGE_FADE_TICK_MAX;
-    g_stageTitleTick = STAGE_TITLE_TICK_MAX;
-}
-
-void StartStarStageTransition(HWND hWnd, int targetStage)
-{
-    if (g_starTransitionActive)
+    if (!isPowerProjectileActive)
         return;
 
-    g_starTransitionActive = true;
-    g_starTransitionMapChanged = false;
-    g_starTransitionTick = 0;
-    g_starTransitionTargetStage = targetStage;
-    g_starTransitionHwnd = hWnd;
-    g_isChangingMap = true;
-
-    StopMove();
-    isAbsorb = false;
-    isSpace = false;
-    isSpaceRelease = false;
-    isCrouch = false;
-    balloonTick = 0;
-    spaceKeyHeld = false;
-    ResetStageProjectiles();
-}
-
-void UpdateStarStageTransition(HWND hWnd)
-{
-    if (!g_starTransitionActive)
+    if (g_powerProjectileFrame == NULL)
         return;
 
-    g_starTransitionTick++;
-
-    if (!g_starTransitionMapChanged &&
-        g_starTransitionTick >= STAR_TRANSITION_CLOSE_TICK)
+    if (powerProjectileDir < 0)
     {
-        ChangeStageNow(hWnd, g_starTransitionTargetStage);
-        g_starTransitionMapChanged = true;
+        DrawImageFlipX(
+            graphics,
+            g_powerProjectileFrame,
+            powerProjectileX,
+            powerProjectileY,
+            powerProjectileW,
+            powerProjectileH
+        );
     }
-
-    if (g_starTransitionTick >= STAR_TRANSITION_CLOSE_TICK + STAR_TRANSITION_OPEN_TICK)
-    {
-        g_starTransitionActive = false;
-        g_starTransitionMapChanged = false;
-        g_starTransitionTick = 0;
-        g_isChangingMap = false;
-    }
-}
-
-void MakeStarPoints(PointF* points, int cx, int cy, float outerR, float innerR)
-{
-    const double PI = 3.14159265358979323846;
-
-    for (int i = 0; i < 10; i++)
-    {
-        double angle = -PI / 2.0 + i * PI / 5.0;
-        float r = (i % 2 == 0) ? outerR : innerR;
-
-        points[i].X = (REAL)(cx + cos(angle) * r);
-        points[i].Y = (REAL)(cy + sin(angle) * r);
-    }
-}
-
-void DrawStarStageTransition(Graphics& graphics, int screenW, int screenH)
-{
-    if (!g_starTransitionActive)
-        return;
-
-    float progress = 0.0f;
-
-    if (g_starTransitionTick < STAR_TRANSITION_CLOSE_TICK)
-        progress = (float)g_starTransitionTick / (float)STAR_TRANSITION_CLOSE_TICK;
     else
     {
-        int openTick = g_starTransitionTick - STAR_TRANSITION_CLOSE_TICK;
-        progress = 1.0f - (float)openTick / (float)STAR_TRANSITION_OPEN_TICK;
+        DrawWorldImage(
+            graphics,
+            g_powerProjectileFrame,
+            powerProjectileX,
+            powerProjectileY,
+            powerProjectileW,
+            powerProjectileH
+        );
+    }
+}
+
+void DrawFireBreath(Graphics& graphics)
+{
+    if (!isFireBreath)
+        return;
+
+    if (g_fireBreathFrame == NULL)
+        return;
+
+    RECT rc = GetFireBreathRect();
+    int w = rc.right - rc.left;
+    int h = rc.bottom - rc.top;
+
+    if (kirbyFaceLeft)
+    {
+        DrawImageFlipX(graphics, g_fireBreathFrame, rc.left, rc.top, w, h);
+    }
+    else
+    {
+        DrawWorldImage(graphics, g_fireBreathFrame, rc.left, rc.top, w, h);
+    }
+}
+
+void DrawFireBall(Graphics& graphics)
+{
+    if (!isFireBallActive)
+        return;
+
+    if (g_fireBallFrame == NULL)
+        return;
+
+    if (fireBallDir < 0)
+    {
+        DrawImageFlipX(graphics, g_fireBallFrame, fireBallX, fireBallY, fireBallW, fireBallH);
+    }
+    else
+    {
+        DrawWorldImage(graphics, g_fireBallFrame, fireBallX, fireBallY, fireBallW, fireBallH);
+    }
+}
+
+void DrawEnemyFireBalls(Graphics& graphics)
+{
+    if (g_fireMonsterAttackFrame == NULL)
+        return;
+
+    for (int i = 0; i < ENEMY_FIREBALL_MAX; i++)
+    {
+        if (!g_enemyFireBalls[i].active)
+            continue;
+
+        if (g_enemyFireBalls[i].dir < 0)
+        {
+            DrawImageFlipX(
+                graphics,
+                g_fireMonsterAttackFrame,
+                g_enemyFireBalls[i].x,
+                g_enemyFireBalls[i].y,
+                g_enemyFireBalls[i].w,
+                g_enemyFireBalls[i].h
+            );
+        }
+        else
+        {
+            DrawWorldImage(
+                graphics,
+                g_fireMonsterAttackFrame,
+                g_enemyFireBalls[i].x,
+                g_enemyFireBalls[i].y,
+                g_enemyFireBalls[i].w,
+                g_enemyFireBalls[i].h
+            );
+        }
+    }
+}
+
+void LoadAllImages(HWND hWnd)
+{
+    g_openingFrame = LoadPNGFromResource(g_hInst, IDB_PNG72);
+
+    g_storyFrames[0] = LoadPNGFromResource(g_hInst, IDB_PNG73);
+    g_storyFrames[1] = LoadPNGFromResource(g_hInst, IDB_PNG74);
+    g_storyFrames[2] = LoadPNGFromResource(g_hInst, IDB_PNG75);
+    g_storyFrames[3] = LoadPNGFromResource(g_hInst, IDB_PNG76);
+    g_storyFrames[4] = LoadPNGFromResource(g_hInst, IDB_PNG77);
+    g_storyFrames[5] = LoadPNGFromResource(g_hInst, IDB_PNG78);
+    g_storyFrames[6] = LoadPNGFromResource(g_hInst, IDB_PNG79);
+
+    g_studentBoyFrame = LoadPNGFromResource(g_hInst, IDB_PNG81);
+    g_studentGirlFrame = LoadPNGFromResource(g_hInst, IDB_PNG83);
+    g_doorFrames[0] = LoadPNGFromResource(g_hInst, IDB_PNG84);
+    g_doorFrames[1] = LoadPNGFromResource(g_hInst, IDB_PNG85);
+    g_doorFrames[2] = LoadPNGFromResource(g_hInst, IDB_PNG86);
+    g_doorFrames[3] = LoadPNGFromResource(g_hInst, IDB_PNG87);
+
+    g_idleFrame = LoadPNGFromResource(g_hInst, IDB_PNG1);
+
+    g_walkFrames[0] = LoadPNGFromResource(g_hInst, IDB_PNG2);
+    g_walkFrames[1] = LoadPNGFromResource(g_hInst, IDB_PNG3);
+    g_walkFrames[2] = LoadPNGFromResource(g_hInst, IDB_PNG4);
+    g_walkFrames[3] = LoadPNGFromResource(g_hInst, IDB_PNG5);
+
+    g_spaceFrames[0] = LoadPNGFromResource(g_hInst, IDB_PNG6);
+    g_spaceFrames[1] = LoadPNGFromResource(g_hInst, IDB_PNG7);
+    g_spaceFrames[2] = LoadPNGFromResource(g_hInst, IDB_PNG8);
+
+    g_absorbFrames[0] = LoadPNGFromResource(g_hInst, IDB_PNG9);
+    g_absorbFrames[1] = LoadPNGFromResource(g_hInst, IDB_PNG10);
+    g_absorbFrames[2] = LoadPNGFromResource(g_hInst, IDB_PNG11);
+
+    g_crouchFrame = LoadPNGFromResource(g_hInst, IDB_PNG12);
+
+    g_spaceReleaseEffect = LoadPNGFromResource(g_hInst, IDB_PNG13);
+
+    g_absorbFrontEffectFrames[0] = LoadPNGFromResource(g_hInst, IDB_PNG14);
+    g_absorbFrontEffectFrames[1] = LoadPNGFromResource(g_hInst, IDB_PNG15);
+
+    g_monsterJumpFrames[0] = LoadPNGFromResource(g_hInst, IDB_PNG16);
+    g_monsterJumpFrames[1] = LoadPNGFromResource(g_hInst, IDB_PNG17);
+
+    g_monsterFrames[0] = LoadPNGFromResource(g_hInst, IDB_PNG18);
+    g_monsterFrames[1] = LoadPNGFromResource(g_hInst, IDB_PNG19);
+    g_monsterFrames[2] = LoadPNGFromResource(g_hInst, IDB_PNG20);
+    g_monsterFrames[3] = LoadPNGFromResource(g_hInst, IDB_PNG21);
+
+    g_monsterDeadFrame = LoadPNGFromResource(g_hInst, IDB_PNG35);
+    g_fireMonsterDeadFrame = LoadPNGFromResource(g_hInst, IDB_PNG71);
+
+    g_background = LoadPNGFromResource(g_hInst, IDB_PNG22);
+    g_background2 = LoadPNGFromResource(g_hInst, IDB_PNG23);
+    g_stage2BackgroundFront = LoadPNGFromResource(g_hInst, IDB_PNG88);
+    g_stage2BackgroundBack = LoadPNGFromResource(g_hInst, IDB_PNG89);
+
+    // 3스테이지 배경.
+    // 여기 빠져 있으면 90/91 리소스를 넣어도 게임에서는 NULL이 돼서 파란 fallback 배경만 나옴.
+    g_stage3BackgroundFront = LoadPNGFromResource(g_hInst, IDB_PNG90);
+    g_stage3BackgroundBack = LoadPNGFromResource(g_hInst, IDB_PNG91);
+
+    // 4스테이지 보스전 배경: 92번 프레임
+    g_stage4Background = LoadPNGFromResource(g_hInst, IDB_PNG92);
+
+    // 4스테이지 보스전 프레임 93~101
+    g_bossMissilePoseFrame = LoadPNGFromResource(g_hInst, IDB_PNG93);
+    g_bossDashFrame = LoadPNGFromResource(g_hInst, IDB_PNG94);
+    g_bossIdleMoveFrame = LoadPNGFromResource(g_hInst, IDB_PNG95);
+    g_bossMissileFrame = LoadPNGFromResource(g_hInst, IDB_PNG96);
+    g_bossMouthBombFrame = LoadPNGFromResource(g_hInst, IDB_PNG97);
+    g_bossTopAttackFrame = LoadPNGFromResource(g_hInst, IDB_PNG98);
+    g_bossPhase2Frame = LoadPNGFromResource(g_hInst, IDB_PNG99);
+    g_bossRainAttackFrame = LoadPNGFromResource(g_hInst, IDB_PNG100);
+    g_bossRainBombFrame = LoadPNGFromResource(g_hInst, IDB_PNG101);
+    g_bossDeathFrame1 = LoadPNGFromResource(g_hInst, IDB_PNG102);
+    g_bossDeathFrame2 = LoadPNGFromResource(g_hInst, IDB_PNG103);
+    g_bossPatternRedBallFrame = LoadPNGFromResource(g_hInst, IDB_PNG104);
+    g_bossPatternBlueBallFrame = LoadPNGFromResource(g_hInst, IDB_PNG105);
+    g_bossHalfFloorWarnFrame = LoadPNGFromResource(g_hInst, IDB_PNG106);
+    g_bossHalfFloorBoomFrame = LoadPNGFromResource(g_hInst, IDB_PNG107);
+    g_bossDoorFrames[0] = LoadPNGFromResource(g_hInst, IDB_PNG108);
+    g_bossDoorFrames[1] = LoadPNGFromResource(g_hInst, IDB_PNG109);
+    g_bossDoorFrames[2] = LoadPNGFromResource(g_hInst, IDB_PNG110);
+    g_bossDoorFrames[3] = LoadPNGFromResource(g_hInst, IDB_PNG111);
+    g_bossKeyFrame = LoadPNGFromResource(g_hInst, IDB_PNG112);
+    g_bossChestClosedFrame = LoadPNGFromResource(g_hInst, IDB_PNG113);
+    g_bossChestOpenFrame = LoadPNGFromResource(g_hInst, IDB_PNG114);
+
+    g_backgroundScaled = CreateScaledBitmap(g_background, BG_PART_W, BG_PART_H);
+    g_background2Scaled = CreateScaledBitmap(g_background2, BG_PART_W, BG_PART_H);
+    g_stage2BackgroundFrontScaled = CreateScaledBitmap(g_stage2BackgroundFront, BG_PART_W, BG_PART_H);
+    g_stage2BackgroundBackScaled = CreateScaledBitmap(g_stage2BackgroundBack, BG_PART_W, BG_PART_H);
+    g_stage3BackgroundFrontScaled = CreateScaledBitmap(g_stage3BackgroundFront, BG_PART_W, BG_PART_H);
+    g_stage3BackgroundBackScaled = CreateScaledBitmap(g_stage3BackgroundBack, BG_PART_W, BG_PART_H);
+    g_stage4BackgroundScaled = CreateScaledBitmap(g_stage4Background, BG_PART_W, BG_PART_H);
+
+    g_powerIdleFrame = LoadPNGFromResource(g_hInst, IDB_PNG24);
+
+    g_powerWalkFrames[0] = LoadPNGFromResource(g_hInst, IDB_PNG25);
+    g_powerWalkFrames[1] = LoadPNGFromResource(g_hInst, IDB_PNG26);
+    g_powerWalkFrames[2] = LoadPNGFromResource(g_hInst, IDB_PNG30);
+    g_powerWalkFrames[3] = LoadPNGFromResource(g_hInst, IDB_PNG31);
+    g_powerWalkFrames[4] = LoadPNGFromResource(g_hInst, IDB_PNG32);
+
+    g_powerAttackFrame = LoadPNGFromResource(g_hInst, IDB_PNG33);
+    g_powerProjectileFrame = LoadPNGFromResource(g_hInst, IDB_PNG34);
+    g_powerDigestFrame = LoadPNGFromResource(g_hInst, IDB_PNG36);
+    g_kirbyHitFrame = LoadPNGFromResource(g_hInst, IDB_PNG37);
+    g_bombKirbyHitFrame = LoadPNGFromResource(g_hInst, IDB_PNG69);
+    g_fireKirbyHitFrame = LoadPNGFromResource(g_hInst, IDB_PNG70);
+    g_hpBarFrame = LoadPNGFromResource(g_hInst, IDB_PNG38);
+
+    g_fireTransformFrame = LoadPNGFromResource(g_hInst, IDB_PNG39);
+    g_fireIdleFrame = LoadPNGFromResource(g_hInst, IDB_PNG40);
+    g_fireWalkFrames[0] = LoadPNGFromResource(g_hInst, IDB_PNG41);
+    g_fireWalkFrames[1] = LoadPNGFromResource(g_hInst, IDB_PNG42);
+    g_fireWalkFrames[2] = LoadPNGFromResource(g_hInst, IDB_PNG43);
+    g_fireWalkFrames[3] = LoadPNGFromResource(g_hInst, IDB_PNG44);
+    g_fireAttackKirbyFrame = LoadPNGFromResource(g_hInst, IDB_PNG45);
+    g_fireBreathFrame = LoadPNGFromResource(g_hInst, IDB_PNG46);
+    g_fireBallFrame = LoadPNGFromResource(g_hInst, IDB_PNG47);
+    g_fireMonsterFrame = LoadPNGFromResource(g_hInst, IDB_PNG48);
+    g_fireMonsterAttackFrame = LoadPNGFromResource(g_hInst, IDB_PNG49);
+
+    // 불 커비 풍선 프레임
+    // SPACE 시작/해제: 50번
+    // SPACE 유지: 51번, 52번 반복
+    g_fireBalloonStartFrame = LoadPNGFromResource(g_hInst, IDB_PNG50);
+    g_fireBalloonFrames[0] = LoadPNGFromResource(g_hInst, IDB_PNG51);
+    g_fireBalloonFrames[1] = LoadPNGFromResource(g_hInst, IDB_PNG52);
+    g_fireCrouchFrame = LoadPNGFromResource(g_hInst, IDB_PNG53);
+
+    g_bombIdleFrame = LoadPNGFromResource(g_hInst, IDB_PNG54);
+    g_bombWalkFrames[0] = LoadPNGFromResource(g_hInst, IDB_PNG55);
+    g_bombWalkFrames[1] = LoadPNGFromResource(g_hInst, IDB_PNG56);
+    g_bombWalkFrames[2] = LoadPNGFromResource(g_hInst, IDB_PNG57);
+    g_bombWalkFrames[3] = LoadPNGFromResource(g_hInst, IDB_PNG58);
+    g_bombBalloonStartFrame = LoadPNGFromResource(g_hInst, IDB_PNG59);
+    g_bombBalloonFrames[0] = LoadPNGFromResource(g_hInst, IDB_PNG60);
+    g_bombBalloonFrames[1] = LoadPNGFromResource(g_hInst, IDB_PNG61);
+    g_bombAttackFrames[0] = LoadPNGFromResource(g_hInst, IDB_PNG62);
+    g_bombAttackFrames[1] = LoadPNGFromResource(g_hInst, IDB_PNG63);
+    g_bombAttackFrames[2] = LoadPNGFromResource(g_hInst, IDB_PNG64);
+    g_bombProjectileFrame = LoadPNGFromResource(g_hInst, IDB_PNG65);
+    // 2스테이지에서 폭탄병을 사용하므로 PNG66, PNG67도 로드
+    g_bombMonsterFrame = LoadPNGFromResource(g_hInst, IDB_PNG66);
+    g_bombMonsterDeadFrame = LoadPNGFromResource(g_hInst, IDB_PNG67);
+    g_bombTransformFrame = LoadPNGFromResource(g_hInst, IDB_PNG68);
+
+    g_dashWindFrames[0] = LoadPNGFromResource(g_hInst, IDB_PNG27);
+    g_dashWindFrames[1] = LoadPNGFromResource(g_hInst, IDB_PNG28);
+    g_dashWindFrames[2] = LoadPNGFromResource(g_hInst, IDB_PNG29);
+
+    // 로드 실패 MessageBox 검사들은 실행 중 불필요한 팝업이라 제거함.
+
+}
+
+void DeleteAllImages()
+{
+    if (g_openingFrame != NULL)
+    {
+        delete g_openingFrame;
+        g_openingFrame = NULL;
     }
 
-    if (progress < 0.0f) progress = 0.0f;
-    if (progress > 1.0f) progress = 1.0f;
-
-    float maxRadius = (float)(screenW > screenH ? screenW : screenH) * 0.95f;
-    float outerRadius = maxRadius * (1.0f - progress);
-    float innerRadius = outerRadius * 0.45f;
-    SolidBrush outsideBrush(Color(230, 20, 15, 45));
-    if (outerRadius <= 2.0f)
+    for (int i = 0; i < STORY_FRAME_COUNT; i++)
     {
-        graphics.FillRectangle(&outsideBrush, 0, 0, screenW, screenH);
-        return;
+        if (g_storyFrames[i] != NULL)
+        {
+            delete g_storyFrames[i];
+            g_storyFrames[i] = NULL;
+        }
     }
 
-    PointF starPoints[10];
-    MakeStarPoints(starPoints, screenW / 2, screenH / 2, outerRadius, innerRadius);
-
-    GraphicsPath starPath;
-    starPath.AddPolygon(starPoints, 10);
-
-    Region darkRegion(Rect(0, 0, screenW, screenH));
-    darkRegion.Exclude(&starPath);
-
-    graphics.FillRegion(&outsideBrush, &darkRegion);
-
-    Pen starPen(Color(220, 255, 230, 80), 4);
-    graphics.DrawPolygon(&starPen, starPoints, 10);
-}
-
-void ResetPlayTimer()
-{
-    g_playTimerStarted = false;
-    g_playTimeTick = 0;
-    g_clearTimeTick = 0;
-    g_clearTimeSaved = false;
-    g_totalDamageCount = 0;
-    g_totalDeathCount = 0;
-    g_bossDamageCount = 0;
-    g_bossDeathCount = 0;
-    g_totalStudentsRescued = 0;
-    g_gameScore = 0;
-}
-
-void StartPlayTimer()
-{
-    if (!g_playTimerStarted)
-        g_playTimerStarted = true;
-}
-
-void UpdatePlayTimer()
-{
-    if (!g_playTimerStarted || g_clearTimeSaved)
-        return;
-
-    g_playTimeTick++;
-}
-
-bool IsFastClear();
-void AddFinalScoreBonus();
-
-void SaveFinalClearTime()
-{
-    if (g_clearTimeSaved)
-        return;
-
-    g_clearTimeTick = g_playTimeTick;
-    g_clearTimeSaved = true;
-    AddFinalScoreBonus();
-}
-
-void FormatClearTimeText(wchar_t* buffer, int tick)
-{
-    int totalSeconds = tick * GAME_TIMER_MS / 1000;
-    int minutes = totalSeconds / 60;
-    int seconds = totalSeconds % 60;
-
-    wsprintf(buffer, L"CLEAR TIME : %02d:%02d", minutes, seconds);
-}
-
-void AddGameScore(int score)
-{
-    if (score <= 0)
-        return;
-
-    g_gameScore += score;
-}
-
-int GetTotalStudentCount()
-{
-    return g_stage1ChildTotal + g_stage2ChildTotal;
-}
-
-bool IsFastClear();
-
-void AddFinalScoreBonus()
-{
-    int rescuedCount = g_totalStudentsRescued;
-    int totalStudents = GetTotalStudentCount();
-    if (rescuedCount > totalStudents)
-        rescuedCount = totalStudents;
-
-    AddGameScore(g_kirbyLives * 500);
-    AddGameScore(rescuedCount * 300);
-
-    if (IsFastClear())
-        AddGameScore(1200);
-    if (g_bossDamageCount == 0 && g_bossDeathCount == 0)
-        AddGameScore(1200);
-    if (g_totalDamageCount == 0)
-        AddGameScore(1600);
-}
-
-int GetClearScore()
-{
-    return g_gameScore;
-}
-
-int GetAchievementCount()
-{
-    int count = 0;
-
-    if (IsFastClear())
-        count++;
-    if (g_bossDamageCount == 0 && g_bossDeathCount == 0)
-        count++;
-    if (g_totalDamageCount == 0)
-        count++;
-
-    return count;
-}
-
-const wchar_t* GetClearRankText(int achievementCount)
-{
-    if (achievementCount >= 3) return L"S";
-    if (achievementCount == 2) return L"A";
-    if (achievementCount == 1) return L"B";
-    return L"C";
-}
-
-bool IsFastClear()
-{
-    int clearSeconds = g_clearTimeTick * GAME_TIMER_MS / 1000;
-    return clearSeconds <= 240;
-}
-
-void DrawClearResultPanel(Graphics& graphics, int screenW, int screenH)
-{
-    if (g_currentStage != 5 || !g_clearTimeSaved)
-        return;
-
-    int panelW = 390;
-    int panelH = 270;
-    int panelX = screenW - panelW - 34;
-    int panelY = 178;
-
-    SolidBrush panelBrush(Color(190, 12, 12, 28));
-    Pen panelPen(Color(230, 255, 230, 90), 2);
-    graphics.FillRectangle(&panelBrush, panelX, panelY, panelW, panelH);
-    graphics.DrawRectangle(&panelPen, panelX, panelY, panelW, panelH);
-
-    FontFamily fontFamily(L"Arial");
-    Font titleFont(&fontFamily, 22, FontStyleBold, UnitPixel);
-    Font rankFont(&fontFamily, 54, FontStyleBold, UnitPixel);
-    Font lineFont(&fontFamily, 16, FontStyleBold, UnitPixel);
-    Font smallFont(&fontFamily, 14, FontStyleBold, UnitPixel);
-
-    SolidBrush titleBrush(Color(255, 255, 245, 200));
-    SolidBrush rankBrush(Color(255, 255, 230, 80));
-    SolidBrush textBrush(Color(240, 230, 235, 255));
-    SolidBrush goodBrush(Color(250, 150, 255, 170));
-    SolidBrush offBrush(Color(155, 135, 135, 155));
-
-    StringFormat centerFormat;
-    centerFormat.SetAlignment(StringAlignmentCenter);
-    centerFormat.SetLineAlignment(StringAlignmentCenter);
-
-    int score = GetClearScore();
-    int achievementCount = GetAchievementCount();
-    const wchar_t* rankText = GetClearRankText(achievementCount);
-    int totalStudents = GetTotalStudentCount();
-    int rescuedCount = g_totalStudentsRescued;
-    if (rescuedCount > totalStudents)
-        rescuedCount = totalStudents;
-
-    RectF titleRect((REAL)panelX, (REAL)(panelY + 12), (REAL)panelW, 30.0f);
-    graphics.DrawString(L"CLEAR RESULT", -1, &titleFont, titleRect, &centerFormat, &titleBrush);
-
-    RectF rankRect((REAL)(panelX + 22), (REAL)(panelY + 48), 90.0f, 66.0f);
-    graphics.DrawString(rankText, -1, &rankFont, rankRect, &centerFormat, &rankBrush);
-
-    wchar_t line[96];
-    wsprintf(line, L"SCORE  %d", score);
-    graphics.DrawString(line, -1, &lineFont, PointF((REAL)(panelX + 126), (REAL)(panelY + 55)), &textBrush);
-
-    wsprintf(line, L"LIFE %d   RESCUE %d/%d", g_kirbyLives, rescuedCount, totalStudents);
-    graphics.DrawString(line, -1, &lineFont, PointF((REAL)(panelX + 126), (REAL)(panelY + 80)), &textBrush);
-
-    wsprintf(line, L"DEATH %d   DAMAGE %d", g_totalDeathCount, g_totalDamageCount);
-    graphics.DrawString(line, -1, &lineFont, PointF((REAL)(panelX + 126), (REAL)(panelY + 105)), &textBrush);
-
-    graphics.DrawString(L"ACHIEVEMENTS", -1, &lineFont, PointF((REAL)(panelX + 24), (REAL)(panelY + 142)), &titleBrush);
-
-    bool achievements[3];
-    achievements[0] = IsFastClear();
-    achievements[1] = (g_bossDamageCount == 0 && g_bossDeathCount == 0);
-    achievements[2] = (g_totalDamageCount == 0);
-
-    const wchar_t* names[3] =
+    if (g_studentBoyFrame != NULL)
     {
-        L"Fast Clear",
-        L"Boss No Miss",
-        L"No Damage Clear"
-    };
+        delete g_studentBoyFrame;
+        g_studentBoyFrame = NULL;
+    }
+
+    if (g_studentGirlFrame != NULL)
+    {
+        delete g_studentGirlFrame;
+        g_studentGirlFrame = NULL;
+    }
+
+    for (int i = 0; i < DOOR_FRAME_COUNT; i++)
+    {
+        if (g_doorFrames[i] != NULL)
+        {
+            delete g_doorFrames[i];
+            g_doorFrames[i] = NULL;
+        }
+    }
+
+    if (g_idleFrame != NULL)
+    {
+        delete g_idleFrame;
+        g_idleFrame = NULL;
+    }
+
+    for (int i = 0; i < walkFrameCount; i++)
+    {
+        if (g_walkFrames[i] != NULL)
+        {
+            delete g_walkFrames[i];
+            g_walkFrames[i] = NULL;
+        }
+    }
+
+    for (int i = 0; i < spaceFrameCount; i++)
+    {
+        if (g_spaceFrames[i] != NULL)
+        {
+            delete g_spaceFrames[i];
+            g_spaceFrames[i] = NULL;
+        }
+    }
+
+    for (int i = 0; i < absorbFrameCount; i++)
+    {
+        if (g_absorbFrames[i] != NULL)
+        {
+            delete g_absorbFrames[i];
+            g_absorbFrames[i] = NULL;
+        }
+    }
+
+    if (g_crouchFrame != NULL)
+    {
+        delete g_crouchFrame;
+        g_crouchFrame = NULL;
+    }
+
+    if (g_spaceReleaseEffect != NULL)
+    {
+        delete g_spaceReleaseEffect;
+        g_spaceReleaseEffect = NULL;
+    }
+
+    for (int i = 0; i < 2; i++)
+    {
+        if (g_absorbFrontEffectFrames[i] != NULL)
+        {
+            delete g_absorbFrontEffectFrames[i];
+            g_absorbFrontEffectFrames[i] = NULL;
+        }
+    }
+
+    for (int i = 0; i < monsterJumpFrameCount; i++)
+    {
+        if (g_monsterJumpFrames[i] != NULL)
+        {
+            delete g_monsterJumpFrames[i];
+            g_monsterJumpFrames[i] = NULL;
+        }
+    }
+
+    for (int i = 0; i < monsterFrameCount; i++)
+    {
+        if (g_monsterFrames[i] != NULL)
+        {
+            delete g_monsterFrames[i];
+            g_monsterFrames[i] = NULL;
+        }
+    }
+
+    if (g_monsterDeadFrame != NULL)
+    {
+        delete g_monsterDeadFrame;
+        g_monsterDeadFrame = NULL;
+    }
+
+    if (g_fireMonsterDeadFrame != NULL)
+    {
+        delete g_fireMonsterDeadFrame;
+        g_fireMonsterDeadFrame = NULL;
+    }
+
+    if (g_backgroundScaled != NULL)
+    {
+        delete g_backgroundScaled;
+        g_backgroundScaled = NULL;
+    }
+
+    if (g_background2Scaled != NULL)
+    {
+        delete g_background2Scaled;
+        g_background2Scaled = NULL;
+    }
+
+    if (g_stage2BackgroundFrontScaled != NULL)
+    {
+        delete g_stage2BackgroundFrontScaled;
+        g_stage2BackgroundFrontScaled = NULL;
+    }
+
+    if (g_stage2BackgroundBackScaled != NULL)
+    {
+        delete g_stage2BackgroundBackScaled;
+        g_stage2BackgroundBackScaled = NULL;
+    }
+
+    if (g_stage3BackgroundFrontScaled != NULL)
+    {
+        delete g_stage3BackgroundFrontScaled;
+        g_stage3BackgroundFrontScaled = NULL;
+    }
+
+    if (g_stage3BackgroundBackScaled != NULL)
+    {
+        delete g_stage3BackgroundBackScaled;
+        g_stage3BackgroundBackScaled = NULL;
+    }
+
+    if (g_stage4BackgroundScaled != NULL)
+    {
+        delete g_stage4BackgroundScaled;
+        g_stage4BackgroundScaled = NULL;
+    }
+
+    if (g_background != NULL)
+    {
+        delete g_background;
+        g_background = NULL;
+    }
+
+    if (g_background2 != NULL)
+    {
+        delete g_background2;
+        g_background2 = NULL;
+    }
+
+    if (g_stage2BackgroundFront != NULL)
+    {
+        delete g_stage2BackgroundFront;
+        g_stage2BackgroundFront = NULL;
+    }
+
+    if (g_stage2BackgroundBack != NULL)
+    {
+        delete g_stage2BackgroundBack;
+        g_stage2BackgroundBack = NULL;
+    }
+
+    if (g_stage3BackgroundFront != NULL)
+    {
+        delete g_stage3BackgroundFront;
+        g_stage3BackgroundFront = NULL;
+    }
+
+    if (g_stage3BackgroundBack != NULL)
+    {
+        delete g_stage3BackgroundBack;
+        g_stage3BackgroundBack = NULL;
+    }
+
+    if (g_stage4Background != NULL)
+    {
+        delete g_stage4Background;
+        g_stage4Background = NULL;
+    }
+
+    if (g_bossMissilePoseFrame != NULL)
+    {
+        delete g_bossMissilePoseFrame;
+        g_bossMissilePoseFrame = NULL;
+    }
+
+    if (g_bossDashFrame != NULL)
+    {
+        delete g_bossDashFrame;
+        g_bossDashFrame = NULL;
+    }
+
+    if (g_bossIdleMoveFrame != NULL)
+    {
+        delete g_bossIdleMoveFrame;
+        g_bossIdleMoveFrame = NULL;
+    }
+
+    if (g_bossMissileFrame != NULL)
+    {
+        delete g_bossMissileFrame;
+        g_bossMissileFrame = NULL;
+    }
+
+    if (g_bossMouthBombFrame != NULL)
+    {
+        delete g_bossMouthBombFrame;
+        g_bossMouthBombFrame = NULL;
+    }
+
+    if (g_bossTopAttackFrame != NULL)
+    {
+        delete g_bossTopAttackFrame;
+        g_bossTopAttackFrame = NULL;
+    }
+
+    if (g_bossPhase2Frame != NULL)
+    {
+        delete g_bossPhase2Frame;
+        g_bossPhase2Frame = NULL;
+    }
+
+    if (g_bossRainAttackFrame != NULL)
+    {
+        delete g_bossRainAttackFrame;
+        g_bossRainAttackFrame = NULL;
+    }
+
+    if (g_bossRainBombFrame != NULL)
+    {
+        delete g_bossRainBombFrame;
+        g_bossRainBombFrame = NULL;
+    }
+
+    if (g_bossDeathFrame1 != NULL)
+    {
+        delete g_bossDeathFrame1;
+        g_bossDeathFrame1 = NULL;
+    }
+
+    if (g_bossDeathFrame2 != NULL)
+    {
+        delete g_bossDeathFrame2;
+        g_bossDeathFrame2 = NULL;
+    }
+
+    if (g_bossPatternRedBallFrame != NULL)
+    {
+        delete g_bossPatternRedBallFrame;
+        g_bossPatternRedBallFrame = NULL;
+    }
+
+    if (g_bossPatternBlueBallFrame != NULL)
+    {
+        delete g_bossPatternBlueBallFrame;
+        g_bossPatternBlueBallFrame = NULL;
+    }
+
+    if (g_bossHalfFloorWarnFrame != NULL)
+    {
+        delete g_bossHalfFloorWarnFrame;
+        g_bossHalfFloorWarnFrame = NULL;
+    }
+
+    if (g_bossHalfFloorBoomFrame != NULL)
+    {
+        delete g_bossHalfFloorBoomFrame;
+        g_bossHalfFloorBoomFrame = NULL;
+    }
+
+    for (int i = 0; i < 4; i++)
+    {
+        if (g_bossDoorFrames[i] != NULL)
+        {
+            delete g_bossDoorFrames[i];
+            g_bossDoorFrames[i] = NULL;
+        }
+    }
+
+    if (g_bossKeyFrame != NULL)
+    {
+        delete g_bossKeyFrame;
+        g_bossKeyFrame = NULL;
+    }
+
+    if (g_bossChestClosedFrame != NULL)
+    {
+        delete g_bossChestClosedFrame;
+        g_bossChestClosedFrame = NULL;
+    }
+
+    if (g_bossChestOpenFrame != NULL)
+    {
+        delete g_bossChestOpenFrame;
+        g_bossChestOpenFrame = NULL;
+    }
+
+    if (g_powerIdleFrame != NULL)
+    {
+        delete g_powerIdleFrame;
+        g_powerIdleFrame = NULL;
+    }
+
+    for (int i = 0; i < powerWalkFrameCount; i++)
+    {
+        if (g_powerWalkFrames[i] != NULL)
+        {
+            delete g_powerWalkFrames[i];
+            g_powerWalkFrames[i] = NULL;
+        }
+    }
+
+    if (g_powerAttackFrame != NULL)
+    {
+        delete g_powerAttackFrame;
+        g_powerAttackFrame = NULL;
+    }
+
+    if (g_powerProjectileFrame != NULL)
+    {
+        delete g_powerProjectileFrame;
+        g_powerProjectileFrame = NULL;
+    }
+
+    if (g_powerDigestFrame != NULL)
+    {
+        delete g_powerDigestFrame;
+        g_powerDigestFrame = NULL;
+    }
+
+    if (g_kirbyHitFrame != NULL)
+    {
+        delete g_kirbyHitFrame;
+        g_kirbyHitFrame = NULL;
+    }
+
+    if (g_bombKirbyHitFrame != NULL)
+    {
+        delete g_bombKirbyHitFrame;
+        g_bombKirbyHitFrame = NULL;
+    }
+
+    if (g_fireKirbyHitFrame != NULL)
+    {
+        delete g_fireKirbyHitFrame;
+        g_fireKirbyHitFrame = NULL;
+    }
+
+    if (g_hpBarFrame != NULL)
+    {
+        delete g_hpBarFrame;
+        g_hpBarFrame = NULL;
+    }
+
+    if (g_fireTransformFrame != NULL)
+    {
+        delete g_fireTransformFrame;
+        g_fireTransformFrame = NULL;
+    }
+
+    if (g_fireIdleFrame != NULL)
+    {
+        delete g_fireIdleFrame;
+        g_fireIdleFrame = NULL;
+    }
+
+    for (int i = 0; i < FIRE_WALK_FRAME_COUNT; i++)
+    {
+        if (g_fireWalkFrames[i] != NULL)
+        {
+            delete g_fireWalkFrames[i];
+            g_fireWalkFrames[i] = NULL;
+        }
+    }
+
+    if (g_fireAttackKirbyFrame != NULL)
+    {
+        delete g_fireAttackKirbyFrame;
+        g_fireAttackKirbyFrame = NULL;
+    }
+
+    if (g_fireBreathFrame != NULL)
+    {
+        delete g_fireBreathFrame;
+        g_fireBreathFrame = NULL;
+    }
+
+    if (g_fireBallFrame != NULL)
+    {
+        delete g_fireBallFrame;
+        g_fireBallFrame = NULL;
+    }
+
+    if (g_fireMonsterFrame != NULL)
+    {
+        delete g_fireMonsterFrame;
+        g_fireMonsterFrame = NULL;
+    }
+
+    if (g_fireMonsterAttackFrame != NULL)
+    {
+        delete g_fireMonsterAttackFrame;
+        g_fireMonsterAttackFrame = NULL;
+    }
+
+    if (g_fireBalloonStartFrame != NULL)
+    {
+        delete g_fireBalloonStartFrame;
+        g_fireBalloonStartFrame = NULL;
+    }
+
+    for (int i = 0; i < 2; i++)
+    {
+        if (g_fireBalloonFrames[i] != NULL)
+        {
+            delete g_fireBalloonFrames[i];
+            g_fireBalloonFrames[i] = NULL;
+        }
+    }
+
+    if (g_fireCrouchFrame != NULL)
+    {
+        delete g_fireCrouchFrame;
+        g_fireCrouchFrame = NULL;
+    }
+
+    if (g_bombIdleFrame != NULL)
+    {
+        delete g_bombIdleFrame;
+        g_bombIdleFrame = NULL;
+    }
+
+    for (int i = 0; i < BOMB_WALK_FRAME_COUNT; i++)
+    {
+        if (g_bombWalkFrames[i] != NULL)
+        {
+            delete g_bombWalkFrames[i];
+            g_bombWalkFrames[i] = NULL;
+        }
+    }
+
+    if (g_bombBalloonStartFrame != NULL)
+    {
+        delete g_bombBalloonStartFrame;
+        g_bombBalloonStartFrame = NULL;
+    }
+
+    for (int i = 0; i < 2; i++)
+    {
+        if (g_bombBalloonFrames[i] != NULL)
+        {
+            delete g_bombBalloonFrames[i];
+            g_bombBalloonFrames[i] = NULL;
+        }
+    }
 
     for (int i = 0; i < 3; i++)
     {
-        SolidBrush* brush = achievements[i] ? &goodBrush : &offBrush;
-        const wchar_t* mark = achievements[i] ? L"[GREAT]" : L"[--]";
-        wsprintf(line, L"%s  %s", mark, names[i]);
-        graphics.DrawString(line, -1, &smallFont, PointF((REAL)(panelX + 28), (REAL)(panelY + 170 + i * 22)), brush);
-    }
-}
-
-void StartStageClearMessage()
-{
-    g_stageClearTick = STAGE_CLEAR_TICK_MAX;
-
-    if (g_currentStage == 4)
-        SaveFinalClearTime();
-
-    PlayGameSound(SFX_CLEAR);
-}
-
-void StartRescueEffect(int x, int y)
-{
-    g_rescueEffectX = x;
-    g_rescueEffectY = y;
-    g_rescueEffectTick = RESCUE_EFFECT_TICK_MAX;
-    PlayGameSound(SFX_RESCUE);
-}
-
-void UpdateScreenEffects()
-{
-    if (g_stageFadeTick > 0)
-        g_stageFadeTick--;
-
-    if (g_stageTitleTick > 0)
-        g_stageTitleTick--;
-
-    if (g_stageClearTick > 0)
-        g_stageClearTick--;
-
-    if (g_controlGuideTick > 0)
-        g_controlGuideTick--;
-    else
-        g_controlGuideForced = false;
-
-    if (g_rescueEffectTick > 0)
-        g_rescueEffectTick--;
-
-    g_edgeEffectTick++;
-
-    if (g_currentStage == 4 && IsBossBerserk())
-        g_bossBerserkFogTick++;
-    else
-        g_bossBerserkFogTick = 0;
-
-    UpdateCameraShake();
-    UpdateCameraPush();
-    UpdateStageRandomCameraShake();
-
-    UpdateStageAtmosphereEffects(g_currentStage);
-}
-
-void DrawSparkleStar(Graphics& graphics, int cx, int cy, int size, int alpha, bool whiteStar)
-{
-    if (alpha <= 0)
-        return;
-
-    if (size < 3)
-        size = 3;
-
-    int inner = size / 2;
-    if (inner < 2)
-        inner = 2;
-
-    Point points[8] =
-    {
-        Point(cx, cy - size),
-        Point(cx + inner, cy - inner),
-        Point(cx + size, cy),
-        Point(cx + inner, cy + inner),
-        Point(cx, cy + size),
-        Point(cx - inner, cy + inner),
-        Point(cx - size, cy),
-        Point(cx - inner, cy - inner)
-    };
-
-    if (alpha > 255)
-        alpha = 255;
-
-    Color fillColor = whiteStar ? Color(alpha, 255, 255, 255) : Color(alpha, 255, 230, 70);
-    SolidBrush fillBrush(fillColor);
-    graphics.FillPolygon(&fillBrush, points, 8);
-
-    if (!whiteStar)
-    {
-        Pen shinePen(Color(alpha, 255, 255, 220), 1);
-        graphics.DrawPolygon(&shinePen, points, 8);
-    }
-}
-
-void DrawRescueEffect(Graphics& graphics)
-{
-    if (g_rescueEffectTick <= 0)
-        return;
-
-    struct RescueSparkle
-    {
-        int dx;
-        int dy;
-        int moveX;
-        int moveY;
-        int delay;
-        int size;
-        bool whiteStar;
-    };
-
-    static const RescueSparkle sparkles[] =
-    {
-        {  0, -12,  0, -4,  0, 6, false },
-        { -14,  -5, -5, -2,  2, 4, true  },
-        {  15,  -6,  5, -2,  3, 4, false },
-        {  -9,  10, -4,  3,  5, 3, false },
-        {  10,  11,  4,  3,  6, 3, true  },
-        { -22,   2, -3,  0,  8, 3, true  },
-        {  22,   1,  3,  0,  9, 3, false }
-    };
-
-    int elapsed = RESCUE_EFFECT_TICK_MAX - g_rescueEffectTick;
-    int count = sizeof(sparkles) / sizeof(sparkles[0]);
-
-    for (int i = 0; i < count; i++)
-    {
-        int life = elapsed - sparkles[i].delay;
-        if (life < 0 || life > 18)
-            continue;
-
-        int alpha = 240 - life * 13;
-        int twinkle = (life % 6 < 3) ? 1 : 0;
-        int x = g_rescueEffectX + sparkles[i].dx + sparkles[i].moveX * life / 18;
-        int y = g_rescueEffectY + sparkles[i].dy + sparkles[i].moveY * life / 18;
-
-        DrawSparkleStar(graphics, x, y, sparkles[i].size + twinkle, alpha, sparkles[i].whiteStar);
-    }
-}
-
-void DrawKirbyDamageFlash(Graphics& graphics)
-{
-    if (!isKirbyHit)
-        return;
-
-    int alpha = 80 + (kirbyHitTick % 6) * 18;
-    if (alpha > 180) alpha = 180;
-
-    SolidBrush flashBrush(Color(alpha, 255, 80, 120));
-    graphics.FillEllipse(&flashBrush, kirbyX - 4, kirbyY - 4, kirbyW + 8, kirbyH + 8);
-}
-
-void DrawScoreHUD(Graphics& graphics, int screenW)
-{
-    if (g_isOpening || g_isStory)
-        return;
-
-    int boxW = 185;
-    int boxH = 34;
-    int boxX = screenW - boxW - 18;
-    int boxY = 18;
-
-    SolidBrush boxBrush(Color(145, 18, 18, 35));
-    Pen boxPen(Color(210, 255, 230, 100), 2);
-    graphics.FillRectangle(&boxBrush, boxX, boxY, boxW, boxH);
-    graphics.DrawRectangle(&boxPen, boxX, boxY, boxW, boxH);
-
-    FontFamily fontFamily(L"Arial");
-    Font font(&fontFamily, 17, FontStyleBold, UnitPixel);
-    SolidBrush textBrush(Color(245, 255, 245, 210));
-
-    wchar_t scoreText[64];
-    wsprintf(scoreText, L"SCORE  %d", g_gameScore);
-    graphics.DrawString(scoreText, -1, &font, PointF((REAL)(boxX + 14), (REAL)(boxY + 8)), &textBrush);
-}
-
-void DrawGameHUD(Graphics& graphics)
-{
-    if (g_currentStage == 5)
-        return;
-
-    SolidBrush panelBrush(Color(150, 15, 20, 35));
-    Pen panelPen(Color(220, 255, 235, 160), 2);
-    graphics.FillRectangle(&panelBrush, 12, 12, 382, 128);
-    graphics.DrawRectangle(&panelPen, 12, 12, 382, 128);
-
-    FontFamily fontFamily(L"Arial");
-    Font stageFont(&fontFamily, 18, FontStyleBold, UnitPixel);
-    Font smallFont(&fontFamily, 16, FontStyleBold, UnitPixel);
-    SolidBrush titleBrush(Color(245, 255, 245, 210));
-    SolidBrush subBrush(Color(240, 230, 240, 255));
-
-    RectF stageRect(28.0f, 18.0f, 340.0f, 24.0f);
-    graphics.DrawString(GetStageHudName(), -1, &stageFont, stageRect, NULL, &titleBrush);
-
-    DrawHPBar(graphics);
-
-    int rescued = 0;
-    int total = 0;
-    GetRescueCount(&rescued, &total);
-
-    if (total > 0)
-    {
-        SolidBrush rescueBackBrush(Color(105, 35, 28, 40));
-        Pen rescuePen(Color(180, 255, 235, 120), 1);
-        graphics.FillRectangle(&rescueBackBrush, 286, 84, 82, 30);
-        graphics.DrawRectangle(&rescuePen, 286, 84, 82, 30);
-
-        if (g_powerProjectileFrame != NULL)
-            graphics.DrawImage(g_powerProjectileFrame, 292, 89, 22, 22);
-        else
-            DrawSparkleStar(graphics, 302, 99, 8, 255, false);
-
-        wchar_t rescueText[32];
-        wsprintf(rescueText, L"%d/%d", rescued, total);
-        RectF rescueRect(316.0f, 89.0f, 48.0f, 22.0f);
-        graphics.DrawString(rescueText, -1, &smallFont, rescueRect, NULL, &subBrush);
-    }
-    else if (g_currentStage == 4)
-    {
-        RectF bossRect(286.0f, 88.0f, 92.0f, 22.0f);
-        graphics.DrawString(L"BOSS", -1, &smallFont, bossRect, NULL, &subBrush);
-    }
-
-    wchar_t lifeText[32];
-    wsprintf(lifeText, L"LIFE  %d", g_kirbyLives);
-    RectF lifeRect(28.0f, 116.0f, 110.0f, 20.0f);
-    graphics.DrawString(lifeText, -1, &smallFont, lifeRect, NULL, &subBrush);
-
-    if (g_debugMode)
-    {
-        SolidBrush debugBrush(Color(230, 255, 120, 120));
-        RectF debugRect(250.0f, 116.0f, 130.0f, 20.0f);
-        graphics.DrawString(L"F1 HITBOX", -1, &smallFont, debugRect, NULL, &debugBrush);
-    }
-}
-
-void DrawStageMessage(Graphics& graphics, int screenW, int y, const wchar_t* text, int alpha)
-{
-    if (alpha <= 0)
-        return;
-
-    int boxW = 460;
-    int boxH = 58;
-    int boxX = screenW / 2 - boxW / 2;
-
-    SolidBrush boxBrush(Color(alpha * 150 / 255, 20, 20, 35));
-    Pen boxPen(Color(alpha, 255, 240, 180), 2);
-    graphics.FillRectangle(&boxBrush, boxX, y, boxW, boxH);
-    graphics.DrawRectangle(&boxPen, boxX, y, boxW, boxH);
-
-    FontFamily fontFamily(L"Arial");
-    Font font(&fontFamily, 26, FontStyleBold, UnitPixel);
-    SolidBrush textBrush(Color(alpha, 255, 250, 210));
-    StringFormat format;
-    format.SetAlignment(StringAlignmentCenter);
-    format.SetLineAlignment(StringAlignmentCenter);
-    RectF rect((REAL)boxX, (REAL)y, (REAL)boxW, (REAL)boxH);
-    graphics.DrawString(text, -1, &font, rect, &format, &textBrush);
-}
-
-void DrawTransitionOverlay(Graphics& graphics, int screenW, int screenH)
-{
-    if (g_stageFadeTick > 0)
-    {
-        int alpha = g_stageFadeTick * 255 / STAGE_FADE_TICK_MAX;
-        if (alpha > 255) alpha = 255;
-        SolidBrush fadeBrush(Color(alpha, 0, 0, 0));
-        graphics.FillRectangle(&fadeBrush, 0, 0, screenW, screenH);
-    }
-
-    if (g_stageTitleTick > 0 && g_currentStage != 5)
-    {
-        int alpha = g_stageTitleTick > 18 ? 230 : g_stageTitleTick * 230 / 18;
-        DrawStageMessage(graphics, screenW, 145, GetStageHudName(), alpha);
-    }
-
-    if (g_stageClearTick > 0)
-    {
-        int alpha = g_stageClearTick > 15 ? 245 : g_stageClearTick * 245 / 15;
-        if (g_currentStage != 5)
-            DrawStageMessage(graphics, screenW, 170, L"STAGE CLEAR", alpha);
-    }
-
-    if (g_currentStage == 5 && g_clearTimeSaved)
-    {
-        wchar_t clearTimeText[64];
-        FormatClearTimeText(clearTimeText, g_clearTimeTick);
-        DrawStageMessage(graphics, screenW, 78, clearTimeText, 235);
-    }
-
-    DrawClearResultPanel(graphics, screenW, screenH);
-}
-
-const wchar_t* GetGameSoundFileName(int soundId)
-{
-    switch (soundId)
-    {
-    case SFX_JUMP: return L"jump.wav";
-    case SFX_HIT: return L"hit.wav";
-    case SFX_RESCUE: return L"rescue.wav";
-    case SFX_DOOR: return L"door.wav";
-    case SFX_CLEAR: return L"clear.wav";
-    case SFX_BOSS_PHASE2: return L"boss_phase2.wav";
-    case SFX_PAUSE: return L"pause.wav";
-    case SFX_RETRY: return L"retry.wav";
-    case SFX_ATTACK: return L"attack.wav";
-    }
-
-    return NULL;
-}
-
-const wchar_t* GetGameSoundAlias(int soundId)
-{
-    switch (soundId)
-    {
-    case SFX_JUMP: return L"sfx_jump";
-    case SFX_HIT: return L"sfx_hit";
-    case SFX_RESCUE: return L"sfx_rescue";
-    case SFX_DOOR: return L"sfx_door";
-    case SFX_CLEAR: return L"sfx_clear";
-    case SFX_BOSS_PHASE2: return L"sfx_phase2";
-    case SFX_PAUSE: return L"sfx_pause";
-    case SFX_RETRY: return L"sfx_retry";
-    case SFX_ATTACK: return L"sfx_attack";
-    }
-
-    return NULL;
-}
-
-bool IsFileExistsW(const wchar_t* path)
-{
-    DWORD attr = GetFileAttributesW(path);
-    return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY) == 0;
-}
-
-void GetExeFolder(wchar_t* folder)
-{
-    GetModuleFileNameW(NULL, folder, MAX_PATH);
-
-    int len = lstrlen(folder);
-    for (int i = len - 1; i >= 0; i--)
-    {
-        if (folder[i] == L'\\' || folder[i] == L'/')
+        if (g_bombAttackFrames[i] != NULL)
         {
-            folder[i] = 0;
-            return;
+            delete g_bombAttackFrames[i];
+            g_bombAttackFrames[i] = NULL;
         }
     }
 
-    folder[0] = 0;
-}
-
-bool BuildGameSoundPath(const wchar_t* fileName, wchar_t* outPath)
-{
-    wchar_t exeFolder[MAX_PATH];
-    GetExeFolder(exeFolder);
-
-    wsprintf(outPath, L"sound\\%s", fileName);
-    if (IsFileExistsW(outPath))
-        return true;
-
-    wsprintf(outPath, L"..\\..\\sound\\%s", fileName);
-    if (IsFileExistsW(outPath))
-        return true;
-
-    wsprintf(outPath, L"%s\\sound\\%s", exeFolder, fileName);
-    if (IsFileExistsW(outPath))
-        return true;
-
-    wsprintf(outPath, L"%s\\..\\..\\sound\\%s", exeFolder, fileName);
-    if (IsFileExistsW(outPath))
-        return true;
-
-    return false;
-}
-
-int GetStageBgmMode()
-{
-    if (g_currentStage == 4)
-        return 1;
-
-    if (g_currentStage == 5)
-        return 2;
-
-    return 0;
-}
-
-void StopFileBGM()
-{
-    mciSendStringW(L"stop bgm_music", NULL, 0, NULL);
-    mciSendStringW(L"close bgm_music", NULL, 0, NULL);
-}
-
-void PlayDefaultStageBGM()
-{
-    StopFileBGM();
-    PlaySound(MAKEINTRESOURCE(IDR_WAVE1), g_hInst, SND_RESOURCE | SND_ASYNC | SND_LOOP);
-}
-
-void PlayFileBGM(const wchar_t* fileName)
-{
-    wchar_t path[MAX_PATH];
-    if (!BuildGameSoundPath(fileName, path))
-        return;
-
-    PlaySound(NULL, NULL, 0);
-    StopFileBGM();
-
-    wchar_t command[512];
-    wsprintf(command, L"open \"%s\" type waveaudio alias bgm_music", path);
-    if (mciSendStringW(command, NULL, 0, NULL) != 0)
-        return;
-
-    mciSendStringW(L"setaudio bgm_music volume to 650", NULL, 0, NULL);
-    mciSendStringW(L"play bgm_music repeat", NULL, 0, NULL);
-}
-
-void SyncStageBGM()
-{
-    int nextMode = GetStageBgmMode();
-    if (g_currentBgmMode == nextMode)
-        return;
-
-    g_currentBgmMode = nextMode;
-
-    if (nextMode == 1)
-        PlayFileBGM(L"kirby_final_boss_nightmare.wav");
-    else if (nextMode == 2)
-        PlayFileBGM(L"kirby_stage_clear_theme.wav");
-    else
-        PlayDefaultStageBGM();
-}
-
-void PlayGameSound(int soundId)
-{
-    const wchar_t* fileName = GetGameSoundFileName(soundId);
-    const wchar_t* alias = GetGameSoundAlias(soundId);
-
-    if (fileName == NULL || alias == NULL)
-        return;
-
-    wchar_t path[MAX_PATH];
-    if (!BuildGameSoundPath(fileName, path))
-        return;
-
-    wchar_t command[512];
-    wsprintf(command, L"stop %s", alias);
-    mciSendStringW(command, NULL, 0, NULL);
-
-    wsprintf(command, L"close %s", alias);
-    mciSendStringW(command, NULL, 0, NULL);
-
-    wsprintf(command, L"open \"%s\" type waveaudio alias %s", path, alias);
-    if (mciSendStringW(command, NULL, 0, NULL) != 0)
-        return;
-
-    wsprintf(command, L"play %s from 0", alias);
-    mciSendStringW(command, NULL, 0, NULL);
-}
-
-void ResetStageProjectiles()
-{
-    isPowerProjectileActive = false;
-    isFireBallActive = false;
-    isFireBreath = false;
-    isFireAttackPose = false;
-    isBombAttack = false;
-    g_bombSpecialAttackMode = false;
-    bombAttackFrameIndex = 0;
-    bombAttackTick = 0;
-    bombAttackBombSpawned = false;
-    isAbilityStarActive = false;
-
-    for (int i = 0; i < ENEMY_FIREBALL_MAX; i++)
-        g_enemyFireBalls[i].active = false;
-
-    for (int i = 0; i < BOMB_OBJECT_MAX; i++)
-        g_bombs[i].active = false;
-
-    for (int i = 0; i < BOMB_EXPLOSION_MAX; i++)
+    if (g_bombProjectileFrame != NULL)
     {
-        g_bombExplosions[i].active = false;
-        g_bombExplosions[i].tick = 0;
-    }
-}
-
-void ResetStageGimmicks()
-{
-    g_windActive = false;
-    g_windDir = 1;
-    g_windTick = 0;
-    g_windCooldownTick = WIND_COOLDOWN;
-
-    g_fallingRockSpawnTick = 25;
-    for (int i = 0; i < FALLING_ROCK_MAX; i++)
-    {
-        g_fallingRocks[i].active = false;
-        g_fallingRocks[i].warning = false;
-        g_fallingRocks[i].x = 0;
-        g_fallingRocks[i].y = 0;
-        g_fallingRocks[i].targetY = 0;
-        g_fallingRocks[i].w = 40;
-        g_fallingRocks[i].h = 40;
-        g_fallingRocks[i].vy = 0.0f;
-        g_fallingRocks[i].warningTick = 0;
-    }
-}
-
-void PushKirbyByWind()
-{
-    if (!g_windActive || g_currentStage != 1 || isGameOver || g_retryActive)
-        return;
-
-    int push = 1;
-    if (!isOnGround)
-        push = 2;
-    if (isSpace)
-        push = 3;
-
-    int nextX = kirbyX + g_windDir * push;
-    int currentWorldW = GetCurrentWorldW();
-
-    if (nextX < 0)
-        nextX = 0;
-    if (nextX + kirbyW > currentWorldW)
-        nextX = currentWorldW - kirbyW;
-
-    RECT nextRc = GetKirbyHitBox(nextX, kirbyY);
-    RECT hitBlock;
-    if (!HitSolidBlock(nextRc, &hitBlock))
-        kirbyX = nextX;
-}
-
-void UpdateStageWind()
-{
-    if (g_currentStage != 1)
-    {
-        g_windActive = false;
-        return;
+        delete g_bombProjectileFrame;
+        g_bombProjectileFrame = NULL;
     }
 
-    if (g_windActive)
+    if (g_bombMonsterFrame != NULL)
     {
-        g_windTick--;
-        PushKirbyByWind();
+        delete g_bombMonsterFrame;
+        g_bombMonsterFrame = NULL;
+    }
 
-        if (g_windTick <= 0)
+    if (g_bombMonsterDeadFrame != NULL)
+    {
+        delete g_bombMonsterDeadFrame;
+        g_bombMonsterDeadFrame = NULL;
+    }
+
+    if (g_bombTransformFrame != NULL)
+    {
+        delete g_bombTransformFrame;
+        g_bombTransformFrame = NULL;
+    }
+
+
+    for (int i = 0; i < dashFrameCount; i++)
+    {
+        if (g_dashWindFrames[i] != NULL)
         {
-            g_windActive = false;
-            g_windCooldownTick = WIND_COOLDOWN;
+            delete g_dashWindFrames[i];
+            g_dashWindFrames[i] = NULL;
         }
-
-        return;
-    }
-
-    if (g_windCooldownTick > 0)
-    {
-        g_windCooldownTick--;
-        return;
-    }
-
-    g_windActive = true;
-    g_windTick = WIND_DURATION;
-    g_windDir = (RandomRange(0, 1) == 0) ? -1 : 1;
-}
-
-int GetRockTargetY(int x, int w, int h)
-{
-    RECT testRc;
-    testRc.left = x;
-    testRc.top = 0;
-    testRc.right = x + w;
-    testRc.bottom = h;
-
-    int groundY = 545;
-    if (FindGroundUnderHitBox(testRc, &groundY))
-        return groundY;
-
-    return 545;
-}
-
-void SpawnFallingRock()
-{
-    if (g_currentStage != 3)
-        return;
-
-    for (int i = 0; i < FALLING_ROCK_MAX; i++)
-    {
-        if (g_fallingRocks[i].active)
-            continue;
-
-        int rockW = 42;
-        int rockH = 42;
-        int currentWorldW = GetCurrentWorldW();
-        int x = kirbyX + RandomRange(-160, 160);
-
-        if (RandomRange(0, 3) == 0)
-            x = cameraX + RandomRange(80, 850);
-
-        if (x < 20) x = 20;
-        if (x + rockW > currentWorldW - 20) x = currentWorldW - rockW - 20;
-
-        g_fallingRocks[i].active = true;
-        g_fallingRocks[i].warning = true;
-        g_fallingRocks[i].x = x;
-        g_fallingRocks[i].y = -70;
-        g_fallingRocks[i].targetY = GetRockTargetY(x, rockW, rockH);
-        g_fallingRocks[i].w = rockW;
-        g_fallingRocks[i].h = rockH;
-        g_fallingRocks[i].vy = (float)RandomRange(8, 12);
-        g_fallingRocks[i].warningTick = FALLING_ROCK_WARNING_TICK;
-        return;
-    }
-}
-
-void UpdateFallingRocks()
-{
-    if (g_currentStage != 3)
-    {
-        for (int i = 0; i < FALLING_ROCK_MAX; i++)
-            g_fallingRocks[i].active = false;
-        return;
-    }
-
-    g_fallingRockSpawnTick--;
-    if (g_fallingRockSpawnTick <= 0)
-    {
-        SpawnFallingRock();
-        g_fallingRockSpawnTick = RandomRange(18, 32);
-    }
-
-    RECT kirbyRc = GetKirbyBodyRect();
-
-    for (int i = 0; i < FALLING_ROCK_MAX; i++)
-    {
-        if (!g_fallingRocks[i].active)
-            continue;
-
-        if (g_fallingRocks[i].warning)
-        {
-            g_fallingRocks[i].warningTick--;
-            if (g_fallingRocks[i].warningTick <= 0)
-            {
-                g_fallingRocks[i].warning = false;
-                g_fallingRocks[i].y = -g_fallingRocks[i].h;
-            }
-            continue;
-        }
-
-        g_fallingRocks[i].y += (int)g_fallingRocks[i].vy;
-        g_fallingRocks[i].vy += 0.35f;
-
-        RECT rockRc;
-        rockRc.left = g_fallingRocks[i].x;
-        rockRc.top = g_fallingRocks[i].y;
-        rockRc.right = g_fallingRocks[i].x + g_fallingRocks[i].w;
-        rockRc.bottom = g_fallingRocks[i].y + g_fallingRocks[i].h;
-
-        if (!isKirbyHit && kirbyHitCooldownTick <= 0 && IsRectHit(kirbyRc, rockRc))
-        {
-            StartKirbyHitEffect();
-            g_fallingRocks[i].active = false;
-            continue;
-        }
-
-        RECT hitBlock;
-        if ((HitSolidBlock(rockRc, &hitBlock) && g_fallingRocks[i].vy >= 0.0f) ||
-            g_fallingRocks[i].y > WORLD_H + 80)
-        {
-            g_fallingRocks[i].active = false;
-        }
-    }
-}
-
-void UpdateStageGimmicks(HWND hWnd)
-{
-    (void)hWnd;
-    UpdateFallingRocks();
-}
-
-void DrawFallingRocks(Graphics& graphics)
-{
-    if (g_currentStage != 3)
-        return;
-
-    for (int i = 0; i < FALLING_ROCK_MAX; i++)
-    {
-        if (!g_fallingRocks[i].active || g_fallingRocks[i].warning)
-            continue;
-
-        int x = g_fallingRocks[i].x;
-        int y = g_fallingRocks[i].y;
-        int w = g_fallingRocks[i].w;
-        int h = g_fallingRocks[i].h;
-
-        if (g_stage3RockFrame != NULL)
-        {
-            DrawWorldImage(graphics, g_stage3RockFrame, x, y, w, h);
-        }
-        else
-        {
-            SolidBrush rockBrush(Color(245, 95, 95, 110));
-            Pen rockPen(Color(230, 45, 45, 60), 2);
-            graphics.FillEllipse(&rockBrush, x, y, w, h);
-            graphics.DrawEllipse(&rockPen, x, y, w, h);
-        }
-    }
-}
-
-void DrawStageGimmicks(Graphics& graphics, int screenW, int screenH)
-{
-    DrawFallingRocks(graphics);
-}
-
-void DrawDarkVisionOverlay(Graphics& graphics, int screenW, int screenH)
-{
-    if (g_currentStage != 2)
-        return;
-
-    int centerX = kirbyX - cameraX + kirbyW / 2;
-    int centerY = kirbyY + kirbyH / 2;
-    int radius = 135;
-
-    // Fire Kirby lights up the nightmare darkness more widely.
-    if (isFireKirby || kirbyAbilityType == 1)
-        radius = 205;
-
-    GraphicsPath viewPath;
-    viewPath.AddEllipse(centerX - radius, centerY - radius, radius * 2, radius * 2);
-
-    Region darkRegion(Rect(0, 0, screenW, screenH));
-    darkRegion.Exclude(&viewPath);
-
-    SolidBrush darkBrush(Color(255, 0, 0, 0));
-    graphics.FillRegion(&darkBrush, &darkRegion);
-}
-
-void ResetKirbyPlayState(bool recoverHp)
-{
-    StopMove();
-    isDash = false;
-    isDragging = false;
-    jumpKeyDown = false;
-    isAbsorb = false;
-    isSpace = false;
-    isSpaceRelease = false;
-    isCrouch = false;
-    balloonTick = 0;
-    spaceKeyHeld = false;
-    spaceFrameIndex = 0;
-    spaceStartFrameDone = false;
-    fireBalloonFrameIndex = 0;
-    fireBalloonStartFrameDone = false;
-    bombBalloonFrameIndex = 0;
-    bombBalloonStartFrameDone = false;
-    kirbyVY = 0.0f;
-    isOnGround = false;
-
-    isGameOver = false;
-    g_gameOverHandled = false;
-    g_kirbyFallGameOver = false;
-    gameOverTick = 0;
-    isKirbyHit = false;
-    kirbyHitTick = 0;
-    kirbyHitCooldownTick = KIRBY_HIT_COOLDOWN;
-    g_kirbySlowTick = 0;
-    g_kirbyBurnTick = 0;
-    g_kirbyBurnDamageTick = 0;
-
-    ResetStageProjectiles();
-
-    if (recoverHp)
-    {
-        kirbyHP = kirbyMaxHP;
-        kirbyDisplayHP = (float)kirbyMaxHP;
-    }
-}
-
-void SetKirbyStageStartPosition()
-{
-    if (g_currentStage == 1)
-    {
-        kirbyX = 55;
-        kirbyY = 470;
-    }
-    else if (g_currentStage == 2)
-    {
-        kirbyX = 70;
-        kirbyY = 330;
-    }
-    else if (g_currentStage == 3)
-    {
-        kirbyX = 145;
-        kirbyY = 500;
-    }
-    else if (g_currentStage == 4)
-    {
-        kirbyX = 80;
-        kirbyY = 480;
-    }
-    else if (g_currentStage == 5)
-    {
-        kirbyX = DANCE_CENTER_X - NORMAL_KIRBY_W / 2;
-        kirbyY = DANCE_FLOOR_Y - NORMAL_KIRBY_H;
-        SetKirbyNormalSizeKeepBottom();
-    }
-
-    g_lastSafeKirbyX = kirbyX;
-    g_lastSafeKirbyY = kirbyY;
-}
-
-void RestartCurrentStage(HWND hWnd)
-{
-    g_isPaused = false;
-    g_retryActive = false;
-    g_finalGameOver = false;
-    g_pauseMenuIndex = 0;
-
-    ResetKirbyPlayState(true);
-    ResetStageGimmicks();
-    SetKirbyStageStartPosition();
-    cameraX = 0;
-
-    InitRescueObjects();
-    InitMonsters();
-    StartStageTransitionEffect();
-
-    if (g_currentStage == 1)
-        g_controlGuideTick = CONTROL_GUIDE_TICK_MAX;
-    else
-        g_controlGuideTick = 0;
-
-    UpdateCamera(hWnd);
-    PlayGameSound(SFX_RETRY);
-}
-
-void StartRetrySequence()
-{
-    if (g_retryActive || g_finalGameOver)
-        return;
-
-    g_gameOverHandled = true;
-    StopMove();
-    isSpace = false;
-    isSpaceRelease = false;
-    isAbsorb = false;
-    isCrouch = false;
-    balloonTick = 0;
-    spaceKeyHeld = false;
-    kirbyVY = 0.0f;
-
-    if (g_kirbyFallGameOver)
-    {
-        g_retryRespawnX = g_lastSafeKirbyX;
-        g_retryRespawnY = g_lastSafeKirbyY;
-    }
-    else
-    {
-        g_retryRespawnX = kirbyX;
-        g_retryRespawnY = kirbyY;
-    }
-
-    g_totalDeathCount++;
-    if (g_currentStage == 4)
-        g_bossDeathCount++;
-
-    if (g_kirbyLives > 0)
-        g_kirbyLives--;
-
-    PlayGameSound(SFX_HIT);
-
-    if (g_kirbyLives <= 0)
-    {
-        g_finalGameOver = true;
-        g_retryActive = false;
-        return;
-    }
-
-    g_retryActive = true;
-    g_retryCountdownTick = RETRY_COUNTDOWN_TICKS;
-}
-
-void RespawnKirbyAtRetryPoint(HWND hWnd)
-{
-    if (!g_retryActive || g_kirbyLives <= 0)
-        return;
-
-    ResetKirbyPlayState(true);
-    ResetStageGimmicks();
-
-    kirbyX = g_retryRespawnX;
-    kirbyY = g_retryRespawnY;
-
-    int currentWorldW = GetCurrentWorldW();
-    if (kirbyX < 0)
-        kirbyX = 0;
-
-    if (kirbyX + kirbyW > currentWorldW)
-        kirbyX = currentWorldW - kirbyW;
-
-    if (kirbyY < 0)
-        kirbyY = 0;
-
-    if (kirbyY + kirbyH > WORLD_H)
-        kirbyY = WORLD_H - kirbyH;
-
-    g_retryActive = false;
-    g_finalGameOver = false;
-    g_retryCountdownTick = RETRY_COUNTDOWN_TICKS;
-    g_lastSafeKirbyX = kirbyX;
-    g_lastSafeKirbyY = kirbyY;
-
-    StartStageTransitionEffect();
-    UpdateCamera(hWnd);
-    PlayGameSound(SFX_RETRY);
-}
-
-void UpdateRetryCountdown(HWND hWnd)
-{
-    if (!g_retryActive)
-        return;
-
-    if (g_retryCountdownTick > 0)
-        g_retryCountdownTick--;
-    else
-    {
-        g_retryActive = false;
-        g_finalGameOver = true;
-    }
-
-    InvalidateRect(hWnd, NULL, FALSE);
-}
-
-void DrawControlGuide(Graphics& graphics, int screenW)
-{
-    if (g_controlGuideTick <= 0)
-        return;
-
-    if (g_currentStage != 1 && !g_controlGuideForced)
-        return;
-
-    int boxW = 230;
-    int boxH = 172;
-    int boxX = screenW - boxW - 16;
-    int boxY = 14;
-
-    int alpha = 155;
-    if (g_controlGuideTick < 35)
-        alpha = 155 * g_controlGuideTick / 35;
-
-    SolidBrush boxBrush(Color(alpha, 12, 16, 30));
-    Pen boxPen(Color(alpha + 70 > 255 ? 255 : alpha + 70, 255, 235, 150), 2);
-    graphics.FillRectangle(&boxBrush, boxX, boxY, boxW, boxH);
-    graphics.DrawRectangle(&boxPen, boxX, boxY, boxW, boxH);
-
-    FontFamily fontFamily(L"Arial");
-    Font titleFont(&fontFamily, 16, FontStyleBold, UnitPixel);
-    Font lineFont(&fontFamily, 14, FontStyleBold, UnitPixel);
-    SolidBrush titleBrush(Color(alpha + 90 > 255 ? 255 : alpha + 90, 255, 245, 210));
-    SolidBrush lineBrush(Color(alpha + 80 > 255 ? 255 : alpha + 80, 230, 235, 255));
-
-    graphics.DrawString(L"CONTROL", -1, &titleFont, PointF((REAL)(boxX + 14), (REAL)(boxY + 10)), &titleBrush);
-    graphics.DrawString(L"\x2190 \x2192  이동", -1, &lineFont, PointF((REAL)(boxX + 18), (REAL)(boxY + 36)), &lineBrush);
-    graphics.DrawString(L"Space  풍선 날기", -1, &lineFont, PointF((REAL)(boxX + 18), (REAL)(boxY + 58)), &lineBrush);
-    graphics.DrawString(L"K  공격", -1, &lineFont, PointF((REAL)(boxX + 18), (REAL)(boxY + 80)), &lineBrush);
-    graphics.DrawString(L"I  특별 공격", -1, &lineFont, PointF((REAL)(boxX + 18), (REAL)(boxY + 102)), &lineBrush);
-    graphics.DrawString(L"O  변신 해제", -1, &lineFont, PointF((REAL)(boxX + 18), (REAL)(boxY + 124)), &lineBrush);
-    graphics.DrawString(L"ESC  일시정지", -1, &lineFont, PointF((REAL)(boxX + 18), (REAL)(boxY + 146)), &lineBrush);
-}
-
-void DrawPauseMenu(Graphics& graphics, int screenW, int screenH)
-{
-    if (!g_isPaused)
-        return;
-
-    SolidBrush darkBrush(Color(170, 0, 0, 0));
-    graphics.FillRectangle(&darkBrush, 0, 0, screenW, screenH);
-
-    int boxW = 360;
-    int boxH = 310;
-    int boxX = screenW / 2 - boxW / 2;
-    int boxY = screenH / 2 - boxH / 2;
-
-    SolidBrush boxBrush(Color(220, 18, 18, 32));
-    Pen boxPen(Color(240, 255, 230, 120), 3);
-    graphics.FillRectangle(&boxBrush, boxX, boxY, boxW, boxH);
-    graphics.DrawRectangle(&boxPen, boxX, boxY, boxW, boxH);
-
-    FontFamily fontFamily(L"Arial");
-    Font titleFont(&fontFamily, 34, FontStyleBold, UnitPixel);
-    Font itemFont(&fontFamily, 22, FontStyleBold, UnitPixel);
-    StringFormat format;
-    format.SetAlignment(StringAlignmentCenter);
-    format.SetLineAlignment(StringAlignmentCenter);
-
-    SolidBrush titleBrush(Color(255, 255, 245, 210));
-    RectF titleRect((REAL)boxX, (REAL)(boxY + 22), (REAL)boxW, 48.0f);
-    graphics.DrawString(L"PAUSE", -1, &titleFont, titleRect, &format, &titleBrush);
-
-    const wchar_t* items[PAUSE_MENU_COUNT] = { L"Continue", L"Restart Stage", L"Exit Game", L"Controls 보기" };
-    for (int i = 0; i < PAUSE_MENU_COUNT; i++)
-    {
-        int y = boxY + 88 + i * 48;
-        if (i == g_pauseMenuIndex)
-        {
-            SolidBrush selBrush(Color(160, 255, 80, 110));
-            graphics.FillRectangle(&selBrush, boxX + 48, y, boxW - 96, 36);
-        }
-
-        SolidBrush itemBrush(i == g_pauseMenuIndex ? Color(255, 255, 255, 255) : Color(230, 220, 220, 235));
-        RectF itemRect((REAL)boxX, (REAL)y, (REAL)boxW, 36.0f);
-        graphics.DrawString(items[i], -1, &itemFont, itemRect, &format, &itemBrush);
-    }
-}
-
-void DrawRetryOverlay(Graphics& graphics, int screenW, int screenH)
-{
-    if (!g_retryActive && !g_finalGameOver)
-        return;
-
-    SolidBrush darkBrush(Color(205, 0, 0, 0));
-    graphics.FillRectangle(&darkBrush, 0, 0, screenW, screenH);
-
-    FontFamily fontFamily(L"Arial");
-    Font titleFont(&fontFamily, 42, FontStyleBold, UnitPixel);
-    Font subFont(&fontFamily, 22, FontStyleBold, UnitPixel);
-    Font smallFont(&fontFamily, 16, FontStyleBold, UnitPixel);
-    StringFormat format;
-    format.SetAlignment(StringAlignmentCenter);
-    format.SetLineAlignment(StringAlignmentCenter);
-
-    SolidBrush titleBrush(Color(255, 255, 240, 200));
-    SolidBrush subBrush(Color(240, 230, 230, 255));
-    SolidBrush warnBrush(Color(255, 255, 80, 110));
-
-    if (g_finalGameOver)
-    {
-        RectF titleRect(0.0f, 205.0f, (REAL)screenW, 58.0f);
-        RectF subRect(0.0f, 270.0f, (REAL)screenW, 32.0f);
-        graphics.DrawString(L"GAME OVER", -1, &titleFont, titleRect, &format, &warnBrush);
-        graphics.DrawString(L"ESC  Quit", -1, &subFont, subRect, &format, &subBrush);
-        return;
-    }
-
-    int seconds = (g_retryCountdownTick + 24) / 25;
-    if (seconds < 0)
-        seconds = 0;
-
-    wchar_t lifeText[64];
-    wchar_t timeText[64];
-    wsprintf(lifeText, L"LIFE  %d", g_kirbyLives);
-    wsprintf(timeText, L"%d", seconds);
-
-    RectF titleRect(0.0f, 185.0f, (REAL)screenW, 58.0f);
-    RectF lifeRect(0.0f, 248.0f, (REAL)screenW, 32.0f);
-    RectF timeRect(0.0f, 288.0f, (REAL)screenW, 42.0f);
-    RectF guideRect(0.0f, 346.0f, (REAL)screenW, 30.0f);
-
-    graphics.DrawString(L"RETRY?", -1, &titleFont, titleRect, &format, &titleBrush);
-    graphics.DrawString(lifeText, -1, &subFont, lifeRect, &format, &subBrush);
-    graphics.DrawString(timeText, -1, &titleFont, timeRect, &format, &warnBrush);
-    graphics.DrawString(L"SPACE  다시 태어나기     ESC  포기", -1, &smallFont, guideRect, &format, &subBrush);
-}
-void UpdatePlayer(HWND hWnd)
-{
-    if (!isDragging && g_currentStage != 5)
-    {
-        UpdateKirbyPosition(hWnd);
-    }
-
-    UpdateBalloonLimit();
-    UpdateDashWindFrame();
-    UpdateSpaceRelease();
-    UpdateAbsorbFrontEffect();
-    UpdatePowerWait();
-    UpdatePowerAttack();
-    UpdatePowerDigest();
-    UpdateFireKirbyStates();
-    UpdateKirbyHitEffect();
-    UpdateKirbyStatusEffects();
-    UpdateHPBarAnimation();
-    UpdatePowerProjectile();
-    UpdateAbilityStar();
-
-    if (!isGameOver && !g_retryActive && isOnGround && kirbyY < WORLD_H)
-    {
-        g_lastSafeKirbyX = kirbyX;
-        g_lastSafeKirbyY = kirbyY;
-    }
-}
-
-void UpdateStage(HWND hWnd)
-{
-    CheckRescueChildTouch();
-    UpdateRescueObjects();
-    CheckDoorTouch(hWnd);
-
-    // 폭탄병은 제거했지만, 나중에 폭탄 커비를 다시 쓸 수 있으니 투사체 갱신 코드는 유지
-    if (g_bombKCooldownTick > 0)
-        g_bombKCooldownTick--;
-
-    if (g_bombICooldownTick > 0)
-        g_bombICooldownTick--;
-
-    UpdateBombAttack();
-    UpdateBombObjects();
-    UpdateEnemyFireBalls();
-
-    if (g_currentStage == 4)
-        g_bossIntroTick++;
-
-    UpdateBossObjects();
-    UpdateDanceStage();
-}
-
-void CheckCollision()
-{
-    CheckPowerProjectileHitMonsters();
-    CheckFireAttacksHitMonsters();
-    CheckKirbyAttacksHitBoss();
-}
-
-void UpdateMonster()
-{
-    for (int i = 0; i < MONSTER_COUNT; i++)
-    {
-        g_monsters[i].Update();
-    }
-}
-
-void CheckKirbyCollision()
-{
-    CheckKirbyHitByMonsters();
-    CheckEnemyFireBallsHitKirby();
-}
-
-void DrawHUD(Graphics& graphics, int screenW, int screenH)
-{
-    DrawGameHUD(graphics);
-    DrawScoreHUD(graphics, screenW);
-    DrawControlGuide(graphics, screenW);
-    DrawKirbyStatusUI(graphics);
-    DrawBossHpBar(graphics);
-    DrawBossPatternText(graphics);
-    DrawTransitionOverlay(graphics, screenW, screenH);
-}
-
-void DrawEdgeBox(Graphics& graphics, int screenW, int screenH, int alpha, int red, int green, int blue, int startInset, int layerCount)
-{
-    if (alpha <= 0)
-        return;
-
-    for (int i = 0; i < layerCount; i++)
-    {
-        int curAlpha = alpha * (layerCount - i) / layerCount;
-        int inset = startInset + i * 5;
-        Pen edgePen(Color(curAlpha, red, green, blue), 5);
-        graphics.DrawRectangle(&edgePen, inset, inset, screenW - inset * 2 - 1, screenH - inset * 2 - 1);
-    }
-}
-
-void DrawScreenEdgeEffects(Graphics& graphics, int screenW, int screenH)
-{
-    // Nightmare stages get a soft dark edge, separate from the stage 2 vision mask.
-    if (g_currentStage == 2 || g_currentStage == 3 || g_currentStage == 4)
-    {
-        DrawEdgeBox(graphics, screenW, screenH, 60, 0, 0, 0, 0, 5);
-        DrawEdgeBox(graphics, screenW, screenH, 40, 35, 0, 65, 10, 4);
-    }
-
-    if (g_currentStage == 4 && IsBossBerserk())
-    {
-        int pulse = (g_edgeEffectTick / 3) % 32;
-        if (pulse > 16)
-            pulse = 32 - pulse;
-
-        int alpha = 85 + pulse * 5;
-        DrawEdgeBox(graphics, screenW, screenH, 95, 0, 0, 0, 0, 5);
-        DrawEdgeBox(graphics, screenW, screenH, alpha, 150, 40, 255, 0, 4);
-        DrawEdgeBox(graphics, screenW, screenH, 55, 45, 0, 80, 20, 3);
-
-        // Every 10 seconds in berserk mode, the purple fog creeps farther into the map.
-        int fogLevel = g_bossBerserkFogTick / 600;
-        if (fogLevel > 5)
-            fogLevel = 5;
-
-        int fogAlpha = 35 + fogLevel * 12;
-        int fogInset = 42 - fogLevel * 7;
-        int fogLayers = 3 + fogLevel;
-        if (fogInset < 4)
-            fogInset = 4;
-
-        DrawEdgeBox(graphics, screenW, screenH, fogAlpha, 95, 20, 170, fogInset, fogLayers);
-    }
-
-    if (!isGameOver && !g_retryActive && kirbyMaxHP > 0 && kirbyHP <= kirbyMaxHP / 5)
-    {
-        int pulse = (g_edgeEffectTick / 2) % 24;
-        if (pulse > 12)
-            pulse = 24 - pulse;
-
-        int alpha = 70 + pulse * 6;
-        DrawEdgeBox(graphics, screenW, screenH, alpha, 255, 20, 20, 16, 6);
     }
 }
 
@@ -5040,7 +6867,7 @@ void DrawHPBar(Graphics& graphics)
     const int scale = 2;
 
     int frameX = 20;
-    int frameY = 34;
+    int frameY = 20;
     int frameW = 124 * scale;
     int frameH = 47 * scale;
 
@@ -5064,30 +6891,6 @@ void DrawHPBar(Graphics& graphics)
     // 체력 색상. 필요하면 RGB 값만 바꾸면 됨
     SolidBrush hpBrush(Color(255, 255, 90, 180));
     graphics.FillRectangle(&hpBrush, hpX, hpY, currentW, hpH);
-}
-
-void DrawOpeningPressSpace(Graphics& graphics, int screenW, int screenH)
-{
-    // Opening screen only: tell the player how to start.
-    if (!g_isOpening)
-        return;
-
-    if ((g_openingTick / 12) % 2 == 1)
-        return;
-
-    FontFamily fontFamily(L"Arial");
-    Font font(&fontFamily, 32, FontStyleBold, UnitPixel);
-    StringFormat format;
-    format.SetAlignment(StringAlignmentCenter);
-    format.SetLineAlignment(StringAlignmentCenter);
-
-    RectF rect(0.0f, (REAL)(screenH - 96), (REAL)screenW, 48.0f);
-    SolidBrush shadowBrush(Color(220, 0, 0, 0));
-    SolidBrush textBrush(Color(245, 255, 245, 190));
-
-    RectF shadowRect(2.0f, (REAL)(screenH - 94), (REAL)screenW, 48.0f);
-    graphics.DrawString(L"Press Space", -1, &font, shadowRect, &format, &shadowBrush);
-    graphics.DrawString(L"Press Space", -1, &font, rect, &format, &textBrush);
 }
 
 void DrawScene(HDC hdc, HWND hWnd)
@@ -5129,8 +6932,6 @@ void DrawScene(HDC hdc, HWND hWnd)
 
         }
 
-        DrawOpeningPressSpace(graphics, rt.right, rt.bottom);
-
         BitBlt(hdc, 0, 0, rt.right, rt.bottom, memDC, 0, 0, SRCCOPY);
 
         return;
@@ -5164,14 +6965,9 @@ void DrawScene(HDC hdc, HWND hWnd)
         return;
     }
 
-    // 5스테이지는 138번 클리어 배경을 사용함
-
-    int cameraDrawOffsetX = GetCameraDrawOffsetX();
-    int cameraDrawOffsetY = GetCameraDrawOffsetY();
-
-    // Apply camera effects only to world drawing.
-    int bg1X = -cameraX + cameraDrawOffsetX;
-    int bg2X = BG_PART_W - cameraX + cameraDrawOffsetX;
+    // 배경은 월드 좌표 기준으로 이어 붙여서 그리고, 화면에는 cameraX만큼 밀려 보이게 함
+    int bg1X = -cameraX;
+    int bg2X = BG_PART_W - cameraX;
 
     Image* bg1Image = NULL;
     Image* bg2Image = NULL;
@@ -5194,12 +6990,6 @@ void DrawScene(HDC hdc, HWND hWnd)
         bg1Image = (g_stage4BackgroundScaled != NULL) ? (Image*)g_stage4BackgroundScaled : g_stage4Background;
         bg2Image = NULL;
     }
-    else if (g_currentStage == 5)
-    {
-        // 5스테이지: 138번 마지막 클리어 배경 하나만 사용
-        bg1Image = (g_stage5ClearBackgroundScaled != NULL) ? (Image*)g_stage5ClearBackgroundScaled : g_stage5ClearBackground;
-        bg2Image = NULL;
-    }
     else
     {
         bg1Image = (g_backgroundScaled != NULL) ? (Image*)g_backgroundScaled : g_background;
@@ -5208,9 +6998,9 @@ void DrawScene(HDC hdc, HWND hWnd)
 
     if (bg1Image != NULL && bg1X + BG_PART_W > 0 && bg1X < rt.right)
     {
-        graphics.DrawImage(bg1Image, bg1X, cameraDrawOffsetY, BG_PART_W, BG_PART_H);
+        graphics.DrawImage(bg1Image, bg1X, 0, BG_PART_W, BG_PART_H);
     }
-    else if (bg1Image == NULL && g_currentStage != 5)
+    else if (bg1Image == NULL)
     {
         // 배경 리소스 로드 실패 시 파란 화면으로 보이지 않게 검은색으로 처리
         HBRUSH bgBrush = CreateSolidBrush(RGB(0, 0, 0));
@@ -5227,18 +7017,22 @@ void DrawScene(HDC hdc, HWND hWnd)
 
     if (bg2Image != NULL && bg2X + BG_PART_W > 0 && bg2X < rt.right)
     {
-        graphics.DrawImage(bg2Image, bg2X, cameraDrawOffsetY, BG_PART_W, BG_PART_H);
+        graphics.DrawImage(bg2Image, bg2X, 0, BG_PART_W, BG_PART_H);
     }
-
-    DrawStageAtmosphereEffects(graphics, g_currentStage, cameraX - cameraDrawOffsetX, rt.right, rt.bottom);
 
     // 커비/몬스터/이펙트는 전부 월드 좌표로 움직이고,
     // 그릴 때만 -cameraX만큼 이동해서 화면에 표시
     GraphicsState worldState = graphics.Save();
 
-    graphics.TranslateTransform((REAL)(-cameraX + cameraDrawOffsetX), (REAL)cameraDrawOffsetY);
+    int shakeX = 0;
+    int shakeY = 0;
+    if (g_currentStage == 4 && g_screenShakeTick > 0)
+    {
+        shakeX = RandomRange(-4, 4);
+        shakeY = RandomRange(-3, 3);
+    }
 
-    DrawStageGimmicks(graphics, rt.right, rt.bottom);
+    graphics.TranslateTransform((REAL)(-cameraX + shakeX), (REAL)shakeY);
 
     for (int i = 0; i < MONSTER_COUNT; i++)
     {
@@ -5246,7 +7040,6 @@ void DrawScene(HDC hdc, HWND hWnd)
     }
 
     DrawRescueObjects(graphics);
-    DrawRescueEffect(graphics);
 
     DrawDashWind(graphics);
 
@@ -5258,14 +7051,7 @@ void DrawScene(HDC hdc, HWND hWnd)
     DrawEnemyFireBalls(graphics);
     DrawBossObjects(graphics);
 
-    bool hideKirbyBlink = isKirbyHit && g_currentStage != 5 && ((kirbyHitTick / 3) % 2 == 1);
-    if (!hideKirbyBlink)
-    {
-    if (g_currentStage == 5)
-    {
-        DrawDanceKirby(graphics);
-    }
-    else if (isKirbyHit)
+    if (isKirbyHit)
     {
         Image* hitFrame = g_kirbyHitFrame;
 
@@ -5422,8 +7208,6 @@ void DrawScene(HDC hdc, HWND hWnd)
         DrawKirbyImage(graphics, g_idleFrame);
     }
 
-    }
-    DrawKirbyDamageFlash(graphics);
     if (g_invincibleMode)
     {
         Pen invPen(Color(220, 255, 255, 80), 3);
@@ -5445,14 +7229,10 @@ void DrawScene(HDC hdc, HWND hWnd)
         }
     }
 
-    DrawDarkVisionOverlay(graphics, rt.right, rt.bottom);
-
-    DrawHUD(graphics, rt.right, rt.bottom);
-    DrawScreenEdgeEffects(graphics, rt.right, rt.bottom);
-    DrawBossPhase2TransitionOverlay(graphics, rt.right, rt.bottom);
-    DrawPauseMenu(graphics, rt.right, rt.bottom);
-    DrawRetryOverlay(graphics, rt.right, rt.bottom);
-    DrawStarStageTransition(graphics, rt.right, rt.bottom);
+    DrawHPBar(graphics);
+    DrawKirbyStatusUI(graphics);
+    DrawBossHpBar(graphics);
+    DrawBossPatternText(graphics);
 
     graphics.Flush();
 
@@ -5479,18 +7259,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
         LoadAllImages(hWnd);
         g_currentStage = 1;
-        g_kirbyLives = KIRBY_MAX_LIVES;
-        ResetPlayTimer();
-        ResetStageAtmosphereEffects();
-        ResetStageGimmicks();
-        g_lastSafeKirbyX = kirbyX;
-        g_lastSafeKirbyY = kirbyY;
         InitMonsters();
         InitRescueObjects();
 
         // WAV 리소스 배경음악 재생
         // resource.h에 있는 실제 소리 ID 이름이 다르면 IDR_WAVE1만 바꾸면 됨
-        SyncStageBGM();
+        PlaySound(
+            MAKEINTRESOURCE(IDR_WAVE1),
+            g_hInst,
+            SND_RESOURCE | SND_ASYNC | SND_LOOP
+        );
 
         UpdateCamera(hWnd);
 
@@ -5504,11 +7282,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     case WM_TIMER:
         if (g_isOpening)
         {
-            if (wParam == 1)
-            {
-                g_openingTick++;
-                InvalidateRect(hWnd, NULL, FALSE);
-            }
+            // 오프닝은 정지 화면이라 계속 다시 그릴 필요 없음
             return 0;
         }
 
@@ -5539,9 +7313,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         bombBalloonFrameIndex = 0;
                         bombBalloonStartFrameDone = false;
                         UpdateCamera(hWnd);
-                        StartStageTransitionEffect();
-                        StartPlayTimer();
-                        g_controlGuideTick = CONTROL_GUIDE_TICK_MAX;
                     }
 
                     InvalidateRect(hWnd, NULL, FALSE);
@@ -5551,47 +7322,54 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             return 0;
         }
 
-        if (g_starTransitionActive)
-        {
-            if (wParam == 1)
-            {
-                UpdateStarStageTransition(hWnd);
-                SyncStageBGM();
-                InvalidateRect(hWnd, NULL, FALSE);
-            }
-
-            return 0;
-        }
-
-        if (g_isPaused || g_retryActive || g_finalGameOver)
-        {
-            if (wParam == 1)
-            {
-                if (g_retryActive)
-                {
-                    UpdatePlayTimer();
-                    UpdateRetryCountdown(hWnd);
-                }
-                else
-                {
-                    InvalidateRect(hWnd, NULL, FALSE);
-                }
-            }
-
-            return 0;
-        }
-
-
         if (wParam == 1)
         {
-            UpdatePlayTimer();
-            UpdatePlayer(hWnd);
-            UpdateStageGimmicks(hWnd);
-            UpdateStage(hWnd);
-            SyncStageBGM();
-            CheckCollision();
-            UpdateMonster();
-            CheckKirbyCollision();
+            if (!isDragging)
+            {
+                UpdateKirbyPosition(hWnd);
+            }
+
+            UpdateBalloonLimit();
+            UpdateDashWindFrame();
+            UpdateSpaceRelease();
+            UpdateAbsorbFrontEffect();
+            UpdatePowerWait();
+            UpdatePowerAttack();
+            UpdatePowerDigest();
+            UpdateFireKirbyStates();
+            UpdateKirbyHitEffect();
+            UpdateKirbyStatusEffects();
+            UpdateHPBarAnimation();
+            UpdatePowerProjectile();
+            UpdateAbilityStar();
+            CheckRescueChildTouch();
+            UpdateRescueObjects();
+            CheckDoorTouch(hWnd);
+            // 폭탄병은 제거했지만, 나중에 폭탄 커비를 다시 쓸 수 있으니 투사체 갱신 코드는 유지
+            if (g_bombKCooldownTick > 0)
+                g_bombKCooldownTick--;
+
+            if (g_bombICooldownTick > 0)
+                g_bombICooldownTick--;
+
+            UpdateBombAttack();
+            UpdateBombObjects();
+            UpdateEnemyFireBalls();
+            if (g_currentStage == 4)
+                g_bossIntroTick++;
+
+            UpdateBossObjects();
+            CheckPowerProjectileHitMonsters();
+            CheckFireAttacksHitMonsters();
+            CheckKirbyAttacksHitBoss();
+
+            for (int i = 0; i < MONSTER_COUNT; i++)
+            {
+                g_monsters[i].Update();
+            }
+
+            CheckKirbyHitByMonsters();
+            CheckEnemyFireBallsHitKirby();
 
             if (isGameOver && !g_gameOverHandled)
             {
@@ -5599,13 +7377,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
                 if (gameOverTick >= GAME_OVER_DELAY)
                 {
-                    StartRetrySequence();
-                    InvalidateRect(hWnd, NULL, FALSE);
+                    // 메시지박스가 떠 있는 동안 타이머가 또 돌면서 MessageBox가 반복 생성되는 것을 막음
+                    g_gameOverHandled = true;
+
+                    KillTimer(hWnd, 1);
+                    KillTimer(hWnd, 2);
+                    KillTimer(hWnd, 3);
+                    KillTimer(hWnd, 5);
+                    KillTimer(hWnd, 7);
+
+                    if (g_kirbyFallGameOver)
+                        MessageBox(hWnd, L"아래로 떨어졌습니다. 게임 오버!", L"GAME OVER", MB_OK);
+                    else
+                        MessageBox(hWnd, L"체력이 0%가 되었습니다. 게임 오버!", L"GAME OVER", MB_OK);
+
+                    DestroyWindow(hWnd);
                     return 0;
                 }
             }
 
-            UpdateScreenEffects();
             UpdateCamera(hWnd);
 
             InvalidateRect(hWnd, NULL, FALSE);
@@ -5765,7 +7555,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
     case WM_LBUTTONDOWN:
     {
-        if (g_isOpening || g_isStory || g_isPaused || g_retryActive || g_finalGameOver)
+        if (g_isOpening || g_isStory)
             return 0;
 
         if (isAbsorb)
@@ -5794,7 +7584,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
     case WM_MOUSEMOVE:
     {
-        if (g_isOpening || g_isStory || g_isPaused || g_retryActive || g_finalGameOver)
+        if (g_isOpening || g_isStory)
             return 0;
 
         int mouseX = LOWORD(lParam);
@@ -5847,7 +7637,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             {
                 g_isOpening = false;
                 g_isStory = true;
-                g_openingTick = 0;
                 g_storyFrameIndex = 0;
                 g_storyTick = 0;
                 StopMove();
@@ -5879,110 +7668,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             }
 
             return 0;
-        }
-
-        if (g_finalGameOver)
-        {
-            if (wParam == VK_ESCAPE)
-                DestroyWindow(hWnd);
-
-            return 0;
-        }
-
-        if (g_retryActive)
-        {
-            if (wParam == VK_SPACE)
-            {
-                RespawnKirbyAtRetryPoint(hWnd);
-                InvalidateRect(hWnd, NULL, FALSE);
-            }
-            else if (wParam == VK_ESCAPE)
-            {
-                g_retryActive = false;
-                g_finalGameOver = true;
-                InvalidateRect(hWnd, NULL, FALSE);
-            }
-
-            return 0;
-        }
-
-        if (g_isPaused)
-        {
-            if (wParam == VK_ESCAPE)
-            {
-                g_isPaused = false;
-                PlayGameSound(SFX_PAUSE);
-            }
-            else if (wParam == VK_UP || wParam == 'W')
-            {
-                g_pauseMenuIndex--;
-                if (g_pauseMenuIndex < 0)
-                    g_pauseMenuIndex = PAUSE_MENU_COUNT - 1;
-                PlayGameSound(SFX_PAUSE);
-            }
-            else if (wParam == VK_DOWN || wParam == 'S')
-            {
-                g_pauseMenuIndex++;
-                if (g_pauseMenuIndex >= PAUSE_MENU_COUNT)
-                    g_pauseMenuIndex = 0;
-                PlayGameSound(SFX_PAUSE);
-            }
-            else if (wParam == VK_RETURN || wParam == VK_SPACE)
-            {
-                if (g_pauseMenuIndex == 0)
-                {
-                    g_isPaused = false;
-                    PlayGameSound(SFX_PAUSE);
-                }
-                else if (g_pauseMenuIndex == 1)
-                {
-                    RestartCurrentStage(hWnd);
-                }
-                else if (g_pauseMenuIndex == 2)
-                {
-                    DestroyWindow(hWnd);
-                }
-                else if (g_pauseMenuIndex == 3)
-                {
-                    g_isPaused = false;
-                    g_controlGuideForced = true;
-                    g_controlGuideTick = CONTROL_GUIDE_RESHOW_TICK;
-                    PlayGameSound(SFX_PAUSE);
-                }
-            }
-
-            InvalidateRect(hWnd, NULL, FALSE);
-            return 0;
-        }
-
-        if (wParam == VK_ESCAPE)
-        {
-            g_isPaused = true;
-            g_pauseMenuIndex = 0;
-            StopMove();
-            PlayGameSound(SFX_PAUSE);
-            InvalidateRect(hWnd, NULL, FALSE);
-            return 0;
-        }
-        if ((lParam & 0x40000000) != 0)
-        {
-            switch (wParam)
-            {
-            case 'W':
-            case 'A':
-            case 'S':
-            case 'D':
-            case VK_LEFT:
-            case VK_RIGHT:
-            case VK_SPACE:
-            case VK_SHIFT:
-            case 'K':
-            case 'I':
-            case 'O':
-            case 'L':
-            case 'U':
-                return 0;
-            }
         }
 
         if (wParam == VK_F1)
@@ -6025,13 +7710,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             break;
 
         case 'A':
-        case VK_LEFT:
             moveLeft = true;
             kirbyFaceLeft = true;
             break;
 
         case 'D':
-        case VK_RIGHT:
             moveRight = true;
             kirbyFaceLeft = false;
             break;
@@ -6079,15 +7762,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
             if (!isAbsorb)
             {
-                if (isOnGround && !isSpace)
-                {
-                    StartJump();
-                    break;
-                }
-
                 if (!isSpace)
                 {
-                    PlayGameSound(SFX_JUMP);
                     balloonTick = 0;
                     spaceFrameIndex = 0;
                     spaceStartFrameDone = false;
@@ -6110,10 +7786,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                 if (GetAsyncKeyState('S') & 0x8000)
                     moveDown = true;
 
-                if (GetAsyncKeyState('A') & 0x8000 || GetAsyncKeyState(VK_LEFT) & 0x8000)
+                if (GetAsyncKeyState('A') & 0x8000)
                     kirbyFaceLeft = true;
 
-                if (GetAsyncKeyState('D') & 0x8000 || GetAsyncKeyState(VK_RIGHT) & 0x8000)
+                if (GetAsyncKeyState('D') & 0x8000)
                     kirbyFaceLeft = false;
             }
             break;
@@ -6195,6 +7871,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             break;
 
         case VK_ESCAPE:
+            DestroyWindow(hWnd);
             break;
         }
 
@@ -6202,7 +7879,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
         break;
 
     case WM_KEYUP:
-        if (g_isOpening || g_isStory || g_isPaused || g_retryActive || g_finalGameOver)
+        if (g_isOpening || g_isStory)
             return 0;
 
         if (wParam == VK_SHIFT)
@@ -6227,19 +7904,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             break;
 
         case 'A':
-        case VK_LEFT:
             moveLeft = false;
 
-            if (GetAsyncKeyState('D') & 0x8000 || GetAsyncKeyState(VK_RIGHT) & 0x8000)
+            if (GetAsyncKeyState('D') & 0x8000)
                 kirbyFaceLeft = false;
 
             break;
 
         case 'D':
-        case VK_RIGHT:
             moveRight = false;
 
-            if (GetAsyncKeyState('A') & 0x8000 || GetAsyncKeyState(VK_LEFT) & 0x8000)
+            if (GetAsyncKeyState('A') & 0x8000)
                 kirbyFaceLeft = true;
 
             break;
@@ -6296,8 +7971,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
         // 프로그램 종료 시 소리 정지
         PlaySound(NULL, NULL, 0);
-        StopFileBGM();
-        mciSendStringW(L"close all", NULL, 0, NULL);
 
         KillTimer(hWnd, 1);
         KillTimer(hWnd, 2);
