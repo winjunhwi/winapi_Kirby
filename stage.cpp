@@ -678,6 +678,7 @@ void InitMonsters()
     if (g_currentStage == 2)
     {
         // 2스테이지: 일반몹 2마리, 불몹 2마리, 폭탄몹 1마리
+
         g_monsters[0].Init(20, 320, 10, 230, 1, 0);
         g_monsters[1].Init(500, 235, 440, 675, -1, 0);
         g_monsters[2].Init(1450, 285, 1425, 1685, -1, 1);
@@ -689,6 +690,7 @@ void InitMonsters()
     if (g_currentStage == 3)
     {
         // 3스테이지: 날아다니는 폭탄 몬스터 3마리
+
         g_monsters[0].Init(50, 255, 0, 250, 1, 2);
         g_monsters[1].Init(820, 150, 790, 945, -1, 2);
         g_monsters[2].Init(1320, 250, 1185, 1495, 1, 2);
